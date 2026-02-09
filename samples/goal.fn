@@ -3,7 +3,7 @@
 
 
 # function that selects the arm to call based on type at comptime
-let print = (...match) {
+let print = (...select) {
     n: i32 => putc(n + '0'),
     s: str => puts(s),
 }
