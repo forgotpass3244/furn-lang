@@ -1,0 +1,29 @@
+# the goal is for this program
+# to eventually be able to compile
+
+
+# function that selects the arm to call based on type at comptime
+let print = (...) for {
+    n: i32 => putc(n + '0'),
+    s: str => puts(s),
+}
+
+# normal function
+pub main = () {
+    # constant folding at comptime removes calculating 7 + 2 at runtime
+    let x = 7 + 2; # immutable
+
+    # function matches arm at comptime to reduce runtime overhead
+    print(x);
+
+    # mutable
+    var y = 100;
+    ++y;
+    y *= x;
+
+    # print result
+    print(y);
+
+    # no semicolon = return, like rust
+    0
+}
