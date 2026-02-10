@@ -12,6 +12,7 @@ pub enum Stmt {
     Expr(Expr),
     ConstDecl(String, Option<Expr>, bool),
     VarDecl(String, Option<Expr>, bool),
+    PackageDecl(String),
 }
 
 impl Expr {

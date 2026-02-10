@@ -8,6 +8,7 @@ pub enum TokenOther {
     Let,
     Var,
     Public,
+    Package,
 
     // symbols
     OParen,
@@ -26,6 +27,7 @@ impl TokenOther {
         token_map.make_keyword("let", TokenOther::Let);
         token_map.make_keyword("var", TokenOther::Var);
         token_map.make_keyword("pub", TokenOther::Public);
+        token_map.make_keyword("package", TokenOther::Package);
 
         token_map.make("(", TokenOther::OParen);
         token_map.make(")", TokenOther::CParen);
@@ -45,6 +47,7 @@ impl fmt::Display for TokenOther {
             TokenOther::Let => write!(f, "kw:let"),
             TokenOther::Var => write!(f, "kw:var"),
             TokenOther::Public => write!(f, "kw:pub"),
+            TokenOther::Package => write!(f, "kw:package"),
 
             TokenOther::OParen => write!(f, "'('"),
             TokenOther::CParen => write!(f, "')'"),

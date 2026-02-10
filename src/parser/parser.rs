@@ -110,6 +110,10 @@ impl Parser<'_> {
             } else {
                 self.parse_const_decl(true)
             }
+        } else if self.match_token(TokenOther::Package).is_some() {
+            let name = self.parse_name()?;
+            self.expect_terminator()?;
+            Ok(Stmt::PackageDecl(name))
         } else {
             let expr = self.parse_expr()?;
             if expr.is_block() {

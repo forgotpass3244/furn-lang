@@ -1,13 +1,12 @@
 use std::collections::VecDeque;
 
-use crate::{ir_gen::{ctimeval::CTimeVal, global::GlobalInfo, ir::IRNode, scope::Scope, symbol::CmplSymbol, variable::Variable}, parser::ast::{Expr, Stmt}};
+use crate::{ir_gen::{ctimeval::CTimeVal, global::GlobalInfo, ir::IRNode, cmpld_program::CompiledProgram, scope::Scope, symbol::CmplSymbol, variable::Variable}, parser::ast::{Expr, Stmt}};
 
 const ADDRESS_SIZE: usize = 8;
 const SIZE_64: usize = 8;
 
 pub struct IRGen<'a> {
-    ir: Vec<IRNode>,
-    pub globals: Vec<GlobalInfo<'a>>,
+    cprog: CompiledProgram<'a>,
     global_scope: Scope<'a>,
     scopes: VecDeque<Scope<'a>>,
     stack_sz: usize,
@@ -16,8 +15,7 @@ pub struct IRGen<'a> {
 impl<'a> IRGen<'a> {
     pub fn new() -> Self {
         Self {
-            ir: Vec::new(),
-            globals: Vec::new(),
+            cprog: CompiledProgram::new(),
             global_scope: Scope::new(),
             scopes: VecDeque::new(),
             stack_sz: 0,
@@ -59,16 +57,22 @@ impl<'a> IRGen<'a> {
         self.global_scope.add(var);
     }
 
-    pub fn generate(&mut self, ast: &'a Vec<Stmt>) -> (&Vec<IRNode>, &Vec<GlobalInfo<'a>>) {
+    pub fn generate(&mut self, ast: &'a Vec<Stmt>) -> &mut CompiledProgram<'a> {
         for stmt in ast {
             self.gen_stmt(&stmt);
         }
-        (&self.ir, &self.globals)
+
+        if self.cprog.any_global_exists() {
+            if self.cprog.get_package_name().is_none() {
+                todo!("add compile errors (unable to export any symbols if a package name was never declared)");
+            }
+        }
+        
+        &mut self.cprog
     }
 
-    fn emit_node(&mut self, node: IRNode) -> &mut IRNode {
-        self.ir.push(node);
-        self.ir.last_mut().unwrap()
+    fn emit_node(&mut self, node: IRNode) {
+        self.cprog.app_node(node);
     }
 
     fn gen_stmt(&mut self, stmt: &'a Stmt) {
@@ -84,6 +88,15 @@ impl<'a> IRGen<'a> {
                 }
 
             },
+
+            Stmt::PackageDecl(name) => {
+                if let Some(name) = self.cprog.get_package_name() {
+                    todo!("add compile errors (package name was previously declared as {name})");
+                } else {
+                    self.cprog.set_package_name(Some(name));
+                }
+            },
+
             Stmt::ConstDecl(name, init, is_exported) => self.gen_decl(name, init, true, *is_exported),
             Stmt::VarDecl(name, init, is_exported) => self.gen_decl(name, init, false, *is_exported),
         }
@@ -109,8 +122,8 @@ impl<'a> IRGen<'a> {
             
             if is_exported {
                 if let Some(const_val) = symbol.const_val {
-                    let global_info = GlobalInfo::new(name, is_exported, const_val);
-                    self.globals.push(global_info);
+                    let global_info = GlobalInfo::new(name, is_exported, const_val, is_const);
+                    self.cprog.add_global(global_info);
                 } else {
                     todo!("add compile errors (exported variable must be initialized with a compile-time constant)")
                 }
@@ -118,6 +131,8 @@ impl<'a> IRGen<'a> {
                 self.gen_expr(expr);
             }
 
+        } else if is_exported {
+            todo!("add compile errors (exported symbol is not initialized)");
         } else if !is_const {
             self.emit_node(IRNode::Push64(0));
         }
@@ -137,7 +152,7 @@ impl<'a> IRGen<'a> {
             },
 
             CTimeVal::Function { address } => {
-                let offset: i16 = (self.ir.len() - *address).try_into().unwrap();
+                let offset: i16 = (self.cprog.count_ir() - *address).try_into().unwrap();
                 self.emit_node(IRNode::PushAddressFromOffset(-offset));
                 self.stack_sz += ADDRESS_SIZE;
             },
@@ -204,20 +219,20 @@ impl<'a> IRGen<'a> {
 
             Expr::Function(expr) => 
             {
-                let jump_over = self.ir.len();
+                let jump_over = self.cprog.count_ir();
                 if self.has_local_scope() {
                     self.emit_node(IRNode::JumpFromOffset(0));
                 }
 
-                let address = self.ir.len();
+                let address = self.cprog.count_ir();
                 self.gen_expr(expr);
                 self.emit_node(IRNode::Pop64ToStack(16));
                 self.emit_node(IRNode::Return);
 
                 if self.has_local_scope() {
-                    let after_func = self.ir.len();
+                    let after_func = self.cprog.count_ir();
 
-                    match &mut self.ir[jump_over] {
+                    match self.cprog.node_mut_at(jump_over) {
                         IRNode::JumpFromOffset(offset_ref) => {
                             let offset: i16 = (after_func - jump_over).try_into().unwrap();
                             *offset_ref = offset;

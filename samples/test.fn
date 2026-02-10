@@ -1,4 +1,34 @@
 
+# exported symbols get mangled to _PKG_pkgname_main
+# additionally if the symbol is mutable
+# it will begin with _PKGv instead of _PKG
+
+# the runtime looks for the _PKG_main_main symbol
+# so the package that contains the main function
+# must also be named main
+
+# the package statement can be anywhere
+# since the symbol names are printed
+# after generating IR
+# so it will add the _PKG_pkgname_exportname
+# after IR gen
+# and non-exported globals will not be mangled
+package main;
+
+# import system
+# explicit 'package' keyword required after 'import'
+# since i will add modules in the future that get lexed and parsed
+# within the same file its imported into
+import package testmod {
+    myfunc: () -> u64, # readonly
+    var myvar: u64, # mutable
+}
+
+# none of that has been implemented yet (TODO)
+
+# return value is 10 since
+# its last evaluated
+# (blocks are expressions)
 pub main = () {
     { 10; }
 }

@@ -1,0 +1,4 @@
+
+package main;
+let num = 88;
+pub main = () { num; }
