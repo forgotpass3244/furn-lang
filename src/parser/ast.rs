@@ -9,7 +9,7 @@ pub enum Expr {
 
 #[derive(Debug)]
 pub enum Stmt {
-    Expr(Expr),
+    Expr(Expr, bool), // the bool is whether or not it is the final expr in a block
     ConstDecl(String, Option<Expr>, bool),
     VarDecl(String, Option<Expr>, bool),
     PackageDecl(String),

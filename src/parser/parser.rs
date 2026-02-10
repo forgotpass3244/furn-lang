@@ -99,6 +99,7 @@ impl<'a> Parser<'a> {
 }
 
 impl Parser<'_> {
+    /// Returns a result: Stmt
     pub fn parse_stmt(&mut self) -> Result<Stmt, ()> {
         if self.match_token(TokenOther::Let).is_some() {
             self.parse_const_decl(false)
@@ -115,13 +116,20 @@ impl Parser<'_> {
             self.expect_terminator()?;
             Ok(Stmt::PackageDecl(name))
         } else {
+
             let expr = self.parse_expr()?;
-            if expr.is_block() {
+
+            let is_final_expr = if self.is_token(TokenOther::CBrace) {
+                true
+            } else if expr.is_block() {
                 self.match_terminator();
+                false
             } else {
                 self.expect_terminator()?;
-            }
-            Ok(Stmt::Expr(expr))
+                false
+            };
+
+            Ok(Stmt::Expr(expr, is_final_expr))
         }
     }
 
@@ -182,7 +190,7 @@ impl Parser<'_> {
                 if self.match_token(TokenOther::CBrace).is_some() {
 
                     match stmt {
-                        Stmt::Expr(expr) => {
+                        Stmt::Expr(expr, true) => {
                             return_expr = Some(Box::new(expr));
                         },
                         _ => body.push(stmt),

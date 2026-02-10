@@ -2,6 +2,7 @@ use crate::ir_gen::ctimeval::CTimeVal;
 
 
 pub struct GlobalInfo<'a> {
+    pub pos: usize, // offset from the global base
     pub name: &'a str,
     pub is_exported: bool,
     pub init: CTimeVal,
@@ -9,8 +10,9 @@ pub struct GlobalInfo<'a> {
 }
 
 impl<'a> GlobalInfo<'a> {
-    pub fn new(name: &'a str, is_exported: bool, init: CTimeVal, is_const: bool) -> Self {
+    pub fn new(pos: usize, name: &'a str, is_exported: bool, init: CTimeVal, is_const: bool) -> Self {
         Self {
+            pos,
             name,
             is_exported,
             init,

@@ -10,6 +10,7 @@ pub struct IRGen<'a> {
     global_scope: Scope<'a>,
     scopes: VecDeque<Scope<'a>>,
     stack_sz: usize,
+    global_sz: usize,
 }
 
 impl<'a> IRGen<'a> {
@@ -19,6 +20,7 @@ impl<'a> IRGen<'a> {
             global_scope: Scope::new(),
             scopes: VecDeque::new(),
             stack_sz: 0,
+            global_sz: 0,
         }
     }
 
@@ -57,14 +59,22 @@ impl<'a> IRGen<'a> {
         self.global_scope.add(var);
     }
 
+    fn new_global_pos(&mut self) -> usize {
+        let prev = self.global_sz;
+        self.global_sz += SIZE_64;
+        prev
+    }
+
     pub fn generate(&mut self, ast: &'a Vec<Stmt>) -> &mut CompiledProgram<'a> {
         for stmt in ast {
             self.gen_stmt(&stmt);
         }
 
-        if self.cprog.any_global_exists() {
-            if self.cprog.get_package_name().is_none() {
-                todo!("add compile errors (unable to export any symbols if a package name was never declared)");
+        if self.cprog.get_package_name().is_none() {
+            if let Some(first_global) = self.cprog.first_global() {
+                if self.cprog.global_count() > 1 || first_global.name != "main" {
+                    todo!("add compile errors (unable to export any symbols if a package name was never declared)");
+                }
             }
         }
         
@@ -77,7 +87,7 @@ impl<'a> IRGen<'a> {
 
     fn gen_stmt(&mut self, stmt: &'a Stmt) {
         match stmt {
-            Stmt::Expr(expr) => {
+            Stmt::Expr(expr, _) => {
                 let prev_stack_sz = self.stack_sz;
                 self.gen_expr(expr);
 
@@ -108,8 +118,12 @@ impl<'a> IRGen<'a> {
             todo!("add compile errors (exports must be global variables)");
         }
 
+        let is_global_var = !self.has_local_scope();
+        let global_pos = if is_global_var { Some(self.new_global_pos()) } else { None };
+
         let mut var = Variable {
             name,
+            global_pos,
             const_val: None,
         };
 
@@ -120,12 +134,12 @@ impl<'a> IRGen<'a> {
                 var.const_val = symbol.const_val.clone();
             }
             
-            if is_exported {
+            if is_global_var {
                 if let Some(const_val) = symbol.const_val {
-                    let global_info = GlobalInfo::new(name, is_exported, const_val, is_const);
+                    let global_info = GlobalInfo::new(global_pos.unwrap_or_default(), name, is_exported, const_val, is_const);
                     self.cprog.add_global(global_info);
                 } else {
-                    todo!("add compile errors (exported variable must be initialized with a compile-time constant)")
+                    todo!("add compile errors (global variable must be initialized with a compile-time constant)")
                 }
             } else if symbol.const_val.is_none() || !is_const {
                 self.gen_expr(expr);
@@ -137,10 +151,10 @@ impl<'a> IRGen<'a> {
             self.emit_node(IRNode::Push64(0));
         }
 
-        if self.has_local_scope() {
-            self.add_var(var);
-        } else {
+        if is_global_var {
             self.add_global(var);
+        } else {
+            self.add_var(var);
         }
     }
 
@@ -174,6 +188,13 @@ impl<'a> IRGen<'a> {
                 if let Some(var) = var {
                     if let Some(const_val) = &var.const_val {
                         self.gen_const_val(const_val);
+                    } else {
+                        if let Some(pos) = var.global_pos {
+                            self.emit_node(IRNode::GlobalReadPush64(pos));
+                            self.stack_sz += SIZE_64;
+                        } else {
+                            todo!("local var read")
+                        }
                     }
                 } else {
                     todo!("add compile errors (variable not found)")
@@ -189,6 +210,10 @@ impl<'a> IRGen<'a> {
 
                 if let Some(return_expr) = return_expr {
                     self.gen_expr(return_expr);
+                } else {
+                    // TODO: if it doesnt have a final expr
+                    // then dont even push anything
+                    self.emit_node(IRNode::Push64(0));
                 }
             },
 

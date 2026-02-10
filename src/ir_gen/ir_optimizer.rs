@@ -53,6 +53,26 @@ impl<'a> IROptimizer<'a> {
                     _ => (),
                 },
 
+                IRNode::GlobalReadPush64(global_pos) => match self.cprog.node_clone_at(i+1) {
+
+                    IRNode::StackDealloc(size) => {
+                        if size == 8 {
+                            self.cprog.shift_nodes(i..=(i+1));
+                            optimize_count += 1;
+                            continue
+                        }
+                    },
+
+                    IRNode::Pop64ToStack(offset) => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        self.cprog.insert_node(i, IRNode::GlobalReadLoad64ToStack(global_pos, offset - 8));
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    _ => (),
+                },
+
                 _ => (),
             }
 

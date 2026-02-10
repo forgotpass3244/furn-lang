@@ -22,11 +22,12 @@ pub fn gen_asm_x86_64_from_ir(out: &mut File, cprog: &CompiledProgram) -> Result
 
         if global.is_exported {
             writeln!(out, "global _{pkg_prefix}_{package_name}_{}", global.name)?;
+            writeln!(out, "_{pkg_prefix}_{package_name}_{} equ _GLOB_{}", global.name, global.pos)?;
         }
 
         if global.is_const {
 
-            write!(out, "_{pkg_prefix}_{package_name}_{} equ ", global.name)?;
+            write!(out, "_GLOB_{} equ ", global.pos)?;
             match global.init {
                 CTimeVal::UInt(int) => writeln!(out, "{int}")?,
                 CTimeVal::Function { address } => writeln!(out, "OP_{address}")?,
@@ -35,7 +36,7 @@ pub fn gen_asm_x86_64_from_ir(out: &mut File, cprog: &CompiledProgram) -> Result
 
         } else {
 
-            write!(out, "_{pkg_prefix}_{package_name}_{}: ", global.name)?;
+            write!(out, "_GLOB_{}: ", global.pos)?;
             match global.init {
                 CTimeVal::UInt(int) => writeln!(out, "dq {int}")?,
                 CTimeVal::Function { address } => writeln!(out, "dq OP_{address}")?,
@@ -56,14 +57,20 @@ pub fn gen_asm_x86_64_from_ir(out: &mut File, cprog: &CompiledProgram) -> Result
             IRNode::Load64(int) => writeln!(out, "    OP_{i}: mov rax, {int}")?,
             IRNode::Push64(int) => writeln!(out, "    OP_{i}: push qword {int}")?,
             IRNode::StackDealloc(size) => writeln!(out, "    OP_{i}: add rsp, {size}")?,
-            IRNode::Load64ToStack(int, offset) => writeln!(out, "    OP_{i}: mov qword [rsp+{}], {int}", offset)?,
-            
+            IRNode::Load64ToStack(int, offset) => writeln!(out, "    OP_{i}: mov qword [rsp+{offset}], {int}")?,
+            IRNode::GlobalReadPush64(offset) => writeln!(out, "    OP_{i}: push qword [_GLOB_{}]", offset)?,
+
             IRNode::Pop64ToStack(offset) => {
                 writeln!(out, "OP_{i}:")?;
                 writeln!(out, "    pop rax")?;
                 writeln!(out, "    mov [rsp+{}], rax", offset - 8)?;
             },
 
+            IRNode::GlobalReadLoad64ToStack(global_offset, offset) => {
+                writeln!(out, "OP_{i}:")?;
+                writeln!(out, "    mov rax, [_GLOB_{global_offset}]")?;
+                writeln!(out, "    mov [rsp+{offset}], rax")?;
+            },
         }
     }
 

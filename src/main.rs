@@ -23,8 +23,6 @@ fn main() {
 
     let mut ir_optimizer = IROptimizer::new(&mut cprog);
     let cprog = ir_optimizer.optimize();
-    
-    // println!("{ir:?}");
 
     let out_dir = DirBuilder::new();
     _ = out_dir.create("out");

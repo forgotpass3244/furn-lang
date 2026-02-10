@@ -63,6 +63,10 @@ impl<'a> CompiledProgram<'a> {
     pub fn global_count(&self) -> usize {
         self.globals.len()
     }
+
+    pub fn first_global(&self) -> Option<&GlobalInfo<'a>> {
+        self.globals.first()
+    }
     
     pub fn add_global(&mut self, global: GlobalInfo<'a>) {
         self.globals.push(global);

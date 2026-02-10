@@ -10,5 +10,7 @@ pub enum IRNode {
     PushAddressFromOffset(i16),
     JumpFromOffset(i16),
     StackDealloc(usize),
+    GlobalReadPush64(usize),
+    GlobalReadLoad64ToStack(usize, usize),
 }
 

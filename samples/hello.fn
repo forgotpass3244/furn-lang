@@ -1,4 +1,4 @@
 
 package main;
-let num = 88;
-pub main = () { num; }
+var num = 7;
+pub main = () { num }
