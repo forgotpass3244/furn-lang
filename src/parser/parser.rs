@@ -174,7 +174,8 @@ impl Parser<'_> {
 
 impl Parser<'_> {
     fn parse_expr(&mut self) -> Result<Expr, ()> {
-        if self.match_token(TokenOther::OParen).is_some() {
+        if self.match_token(TokenOther::Dot).is_some() {
+            self.expect_token(TokenOther::OParen)?;
             self.expect_token(TokenOther::CParen)?;
             let expr = self.parse_expr()?;
             Ok(Expr::Function(Box::new(expr)))

@@ -18,6 +18,7 @@ pub enum TokenOther {
     Semicolon,
     Equal,
     ColonColon,
+    Dot,
 }
 
 impl TokenOther {
@@ -26,7 +27,7 @@ impl TokenOther {
 
         token_map.make_keyword("let", TokenOther::Let);
         token_map.make_keyword("var", TokenOther::Var);
-        token_map.make_keyword("pub", TokenOther::Public);
+        token_map.make_keyword("public", TokenOther::Public);
         token_map.make_keyword("package", TokenOther::Package);
 
         token_map.make("(", TokenOther::OParen);
@@ -36,6 +37,7 @@ impl TokenOther {
         token_map.make(";", TokenOther::Semicolon);
         token_map.make("=", TokenOther::Equal);
         token_map.make("::", TokenOther::ColonColon);
+        token_map.make(".", TokenOther::Dot);
 
         token_map
     }
@@ -46,7 +48,7 @@ impl fmt::Display for TokenOther {
         match self {
             TokenOther::Let => write!(f, "kw:let"),
             TokenOther::Var => write!(f, "kw:var"),
-            TokenOther::Public => write!(f, "kw:pub"),
+            TokenOther::Public => write!(f, "kw:public"),
             TokenOther::Package => write!(f, "kw:package"),
 
             TokenOther::OParen => write!(f, "'('"),
@@ -56,6 +58,7 @@ impl fmt::Display for TokenOther {
             TokenOther::Semicolon => write!(f, "';'"),
             TokenOther::Equal => write!(f, "'='"),
             TokenOther::ColonColon => write!(f, "'::'"),
+            TokenOther::Dot => write!(f, "'.'"),
         }
     }
 }

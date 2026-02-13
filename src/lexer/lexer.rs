@@ -22,6 +22,27 @@ impl Lexer {
         while !self.is_eof() {
             if self.is_space() {
                 self.advance();
+            } else if self.peek() == '#' {
+                self.advance();
+                if self.peek() == '{' {
+                    self.advance();
+                    
+                    let mut brace_nest_level = 0;
+                    loop {
+                        let ch = self.advance();
+                        if ch == '{' {
+                            brace_nest_level += 1;
+                        } else if ch == '}' {
+                            if brace_nest_level <= 0 {
+                                break
+                            } else {
+                                brace_nest_level -= 1;
+                            }
+                        }
+                    }
+                } else {
+                    while self.advance() != '\n' {}
+                }
             } else if self.is_alpha() {
                 let ident = self.lex_ident();
                 let token_keyword = self.map_to_keyword(&token_map, &ident);
@@ -101,13 +122,18 @@ impl Lexer {
         ch.is_alphabetic() || ch == '_'
     }
 
+    fn is_alphanum(&self) -> bool {
+        if self.is_eof() { return false }
+        self.is_alpha() || self.is_digit()
+    }
+
     fn is_digit(&self) -> bool {
         !self.is_eof() && self.peek().is_ascii_digit()
     }
 
     fn lex_ident(&mut self) -> String {
         let mut text = String::new();
-        while self.is_alpha() {
+        while self.is_alphanum() {
             let ch = self.advance();
             text.push(ch);
         }

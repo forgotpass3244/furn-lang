@@ -3,10 +3,7 @@
 
 
 # function that selects the arm to call based on type at comptime
-# symbol names for each arm are based on the type
-let print = .(...select);
-
-impl print {
+let print = .(...select) {
     n: i32 => putc(n + '0'),
     s: char[] => puts(s),
 }

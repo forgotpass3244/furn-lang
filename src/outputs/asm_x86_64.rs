@@ -7,12 +7,6 @@ use crate::ir_gen::ir::IRNode;
 
 
 pub fn gen_asm_x86_64_from_ir(out: &mut File, cprog: &CompiledProgram) -> Result<(), std::io::Error> {
-    writeln!(out, "; nasm -felf64 rt.asm -o out/rt.o")?;
-    writeln!(out)?;
-    writeln!(out, "; nasm -felf64 out/out.asm -o out/out.o")?;
-    writeln!(out, "; ld out/rt.o out/out.o -o out/out")?;
-    writeln!(out)?;
-
     writeln!(out, "section .data")?;
 
     let package_name = cprog.get_package_name().unwrap_or("main");
@@ -56,9 +50,11 @@ pub fn gen_asm_x86_64_from_ir(out: &mut File, cprog: &CompiledProgram) -> Result
             IRNode::PushAddressFromOffset(offset) => writeln!(out, "    OP_{i}: push qword OP_{}", (i as i16) + offset)?,
             IRNode::Load64(int) => writeln!(out, "    OP_{i}: mov rax, {int}")?,
             IRNode::Push64(int) => writeln!(out, "    OP_{i}: push qword {int}")?,
+            IRNode::StackAlloc(size) => writeln!(out, "    OP_{i}: sub rsp, {size}")?,
             IRNode::StackDealloc(size) => writeln!(out, "    OP_{i}: add rsp, {size}")?,
             IRNode::Load64ToStack(int, offset) => writeln!(out, "    OP_{i}: mov qword [rsp+{offset}], {int}")?,
-            IRNode::GlobalReadPush64(offset) => writeln!(out, "    OP_{i}: push qword [_GLOB_{}]", offset)?,
+            IRNode::GlobalReadPush64(offset) => writeln!(out, "    OP_{i}: push qword [_GLOB_{offset}]")?,
+            IRNode::StackReadPush64(offset) => writeln!(out, "    OP_{i}: push qword [rsp+{offset}]")?,
 
             IRNode::Pop64ToStack(offset) => {
                 writeln!(out, "OP_{i}:")?;

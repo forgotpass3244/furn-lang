@@ -1,0 +1,6 @@
+
+let num = 7;
+public main = .() {
+    var local = num;
+    local
+}

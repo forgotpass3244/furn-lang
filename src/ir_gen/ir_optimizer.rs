@@ -33,6 +33,18 @@ impl<'a> IROptimizer<'a> {
 
             match self.cprog.node_clone_at(i) {
 
+                IRNode::StackAlloc(0) => {
+                    self.cprog.shift_nodes(i..=(i));
+                    optimize_count += 1;
+                    continue
+                },
+
+                IRNode::StackDealloc(0) => {
+                    self.cprog.shift_nodes(i..=(i));
+                    optimize_count += 1;
+                    continue
+                },
+
                 IRNode::Push64(int) => match self.cprog.node_clone_at(i+1) {
 
                     IRNode::StackDealloc(size) => {
@@ -48,6 +60,20 @@ impl<'a> IROptimizer<'a> {
                         self.cprog.insert_node(i, IRNode::Load64ToStack(int, offset - 8));
                         optimize_count += 1;
                         continue
+                    },
+
+                    _ => (),
+                },
+
+                IRNode::StackAlloc(8) => match self.cprog.node_clone_at(i+1) {
+
+                    IRNode::Load64ToStack(int, offset) => {
+                        if offset == 0 {
+                            self.cprog.shift_nodes(i..=(i+1));
+                            self.cprog.insert_node(i, IRNode::Push64(int));
+                            optimize_count += 1;
+                            continue
+                        }
                     },
 
                     _ => (),
@@ -69,6 +95,21 @@ impl<'a> IROptimizer<'a> {
                         optimize_count += 1;
                         continue
                     },
+
+                    _ => (),
+                },
+
+                IRNode::StackReadPush64(_offset) => match self.cprog.node_clone_at(i+1) {
+
+                    IRNode::StackDealloc(size) => {
+                        if size == 8 {
+                            self.cprog.shift_nodes(i..=(i+1));
+                            optimize_count += 1;
+                            continue
+                        }
+                    },
+
+                    IRNode::Pop64ToStack(_offset) => println!("TODO optimize (StackReadPush64, Pop64ToStack) -> StackReadLoad64ToStack"),
 
                     _ => (),
                 },

@@ -24,6 +24,48 @@ impl<'a> IRGen<'a> {
         }
     }
 
+    fn open_scope(&mut self) {
+        self.scopes.push_front(Scope::new());
+    }
+
+    fn scope_locals_stackp(&self) -> Option<usize> {
+        let mut stack_loc = self.stack_sz;
+        if let Some(scope) = self.scopes.front() {
+            for var in scope.iter() {
+                if let Some(_) = var.stack_loc {
+                    stack_loc -= SIZE_64;
+                }
+            }
+        } else {
+            panic!()
+        }
+
+        if stack_loc == self.stack_sz {
+            None
+        } else {
+            Some(stack_loc)
+        }
+    }
+
+    fn close_scope(&mut self) {
+        if let Some(scope) = self.scopes.pop_front() {
+
+            let mut locals_size_total = 0;
+
+            for var in scope.iter() {
+                if let Some(_) = var.stack_loc {
+                    locals_size_total += SIZE_64
+                }
+            }
+
+            self.emit_node(IRNode::StackDealloc(locals_size_total));
+            self.stack_sz -= locals_size_total;
+
+        } else {
+            panic!("warning (this shouldn't happen): attempted to close scope but there is are no scopes to close")
+        }
+    }
+
     fn has_local_scope(&self) -> bool {
         !self.scopes.is_empty()
     }
@@ -71,8 +113,8 @@ impl<'a> IRGen<'a> {
         }
 
         if self.cprog.get_package_name().is_none() {
-            if let Some(first_global) = self.cprog.first_global() {
-                if self.cprog.global_count() > 1 || first_global.name != "main" {
+            for global in self.cprog.globals_iter() {
+                    if global.is_exported && global.name != "main" {
                     todo!("add compile errors (unable to export any symbols if a package name was never declared)");
                 }
             }
@@ -124,6 +166,7 @@ impl<'a> IRGen<'a> {
         let mut var = Variable {
             name,
             global_pos,
+            stack_loc: None,
             const_val: None,
         };
 
@@ -143,12 +186,15 @@ impl<'a> IRGen<'a> {
                 }
             } else if symbol.const_val.is_none() || !is_const {
                 self.gen_expr(expr);
+                var.stack_loc = Some(self.stack_sz);
             }
 
         } else if is_exported {
             todo!("add compile errors (exported symbol is not initialized)");
         } else if !is_const {
             self.emit_node(IRNode::Push64(0));
+            self.stack_sz += SIZE_64;
+            var.stack_loc = Some(self.stack_sz);
         }
 
         if is_global_var {
@@ -192,8 +238,9 @@ impl<'a> IRGen<'a> {
                         if let Some(pos) = var.global_pos {
                             self.emit_node(IRNode::GlobalReadPush64(pos));
                             self.stack_sz += SIZE_64;
-                        } else {
-                            todo!("local var read")
+                        } else if let Some(stack_loc) = var.stack_loc {
+                            self.emit_node(IRNode::StackReadPush64(self.stack_sz - stack_loc));
+                            self.stack_sz += SIZE_64;
                         }
                     }
                 } else {
@@ -203,6 +250,12 @@ impl<'a> IRGen<'a> {
             },
 
             Expr::Block(body, return_expr) => {
+
+                // alloc for return (final expr)
+                self.emit_node(IRNode::StackAlloc(SIZE_64));
+                self.stack_sz += SIZE_64;
+
+                self.open_scope();
 
                 for stmt in body {
                     self.gen_stmt(stmt);
@@ -214,7 +267,15 @@ impl<'a> IRGen<'a> {
                     // TODO: if it doesnt have a final expr
                     // then dont even push anything
                     self.emit_node(IRNode::Push64(0));
+                    self.stack_sz += SIZE_64;
                 }
+
+                match self.scope_locals_stackp() {
+                    Some(locals_begin_stackp) => self.emit_node(IRNode::Pop64ToStack((self.stack_sz - locals_begin_stackp) + SIZE_64)),
+                    None => self.emit_node(IRNode::Pop64ToStack(8)),
+                }
+
+                self.close_scope();
             },
 
             Expr::Function(_) => {
