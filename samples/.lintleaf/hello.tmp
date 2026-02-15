@@ -1,0 +1,19 @@
+
+# My comment
+#{
+My
+multi-line
+comment
+}
+
+# a `let` binding allows the compiler to perform comptime optimizations like value inlining
+let num = 67; # type annotation optional
+let get_num = .() { num };
+
+let message: str = "hello, furn!\n";
+
+public main = .() {
+    print(message);
+    print("exiting...!\n");
+    get_num()
+}
