@@ -1,6 +1,6 @@
 use crate::ir_gen::ctimeval::CTimeVal;
 
-
+#[derive(Clone)]
 pub struct GlobalInfo<'a> {
     pub pos: usize, // offset from the global base
     pub name: &'a str,

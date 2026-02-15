@@ -22,6 +22,9 @@ impl Lexer {
         while !self.is_eof() {
             if self.is_space() {
                 self.advance();
+            } else if self.peek() == '"' {
+                let text = self.lex_quoted();
+                tokens.push(Token::StringLiteral(text));
             } else if self.peek() == '#' {
                 self.advance();
                 if self.peek() == '{' {
@@ -129,6 +132,30 @@ impl Lexer {
 
     fn is_digit(&self) -> bool {
         !self.is_eof() && self.peek().is_ascii_digit()
+    }
+
+    fn lex_quoted(&mut self) -> String {
+        let quote = self.advance();
+
+        let mut text = String::new();
+        while self.peek() != quote {
+            let ch = self.advance();
+            if ch == '\\' {
+
+                let escaped_ch = match self.advance() {
+                    '\\' => '\\',
+                    'n' => '\n',
+                    ch => ch,
+                };
+
+                text.push(escaped_ch);
+            } else {
+                text.push(ch);
+            }
+        }
+
+        self.advance();
+        text
     }
 
     fn lex_ident(&mut self) -> String {

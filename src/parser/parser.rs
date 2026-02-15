@@ -133,11 +133,16 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_const_decl(&mut self, is_exported: bool) -> Result<Stmt, ()> {
+    fn parse_const_decl(&mut self, is_exported: bool) -> Result<Stmt, ()>{
         let name = self.parse_name()?;
 
+        let mut type_expr = None;
+        if self.match_token(TokenOther::Colon).is_some() {
+            type_expr = Some(self.parse_expr()?);
+        }
+
         if self.match_terminator().is_some() {
-            Ok(Stmt::ConstDecl(name, None, is_exported))
+            Ok(Stmt::ConstDecl(name, None, type_expr, is_exported))
         } else if self.match_token(TokenOther::Equal).is_some() {
             let expr = self.parse_expr()?;
             if expr.is_block() {
@@ -145,7 +150,7 @@ impl Parser<'_> {
             } else {
                 self.expect_terminator()?;
             }
-            Ok(Stmt::ConstDecl(name, Some(expr), is_exported))
+            Ok(Stmt::ConstDecl(name, Some(expr), type_expr, is_exported))
         } else {
             self.emit_error("expected one of `;`, `:` or `=`");
             Err(())
@@ -155,8 +160,13 @@ impl Parser<'_> {
     fn parse_var_decl(&mut self, is_exported: bool) -> Result<Stmt, ()>{
         let name = self.parse_name()?;
 
+        let mut type_expr = None;
+        if self.match_token(TokenOther::Colon).is_some() {
+            type_expr = Some(self.parse_expr()?);
+        }
+
         if self.match_terminator().is_some() {
-            Ok(Stmt::VarDecl(name, None, is_exported))
+            Ok(Stmt::VarDecl(name, None, type_expr, is_exported))
         } else if self.match_token(TokenOther::Equal).is_some() {
             let expr = self.parse_expr()?;
             if expr.is_block() {
@@ -164,7 +174,7 @@ impl Parser<'_> {
             } else {
                 self.expect_terminator()?;
             }
-            Ok(Stmt::VarDecl(name, Some(expr), is_exported))
+            Ok(Stmt::VarDecl(name, Some(expr), type_expr, is_exported))
         } else {
             self.emit_error("expected one of `;`, `:` or `=`");
             Err(())
@@ -174,6 +184,40 @@ impl Parser<'_> {
 
 impl Parser<'_> {
     fn parse_expr(&mut self) -> Result<Expr, ()> {
+        self.parse_primary_expr()
+    }
+
+    fn parse_primary_expr(&mut self) -> Result<Expr, ()> {
+        let mut expr = self.parse_secondary_expr()?;
+        loop {
+            if self.match_token(TokenOther::OParen).is_some() {
+                // parse args
+                let mut args = Vec::new();
+                loop {
+                    if self.match_token(TokenOther::CParen).is_some() {
+                        break
+                    } else {
+                        let arg = self.parse_expr()?;
+                        args.push(arg);
+
+                        if !self.is_token(TokenOther::CParen) {
+                            self.expect_token(TokenOther::Comma)?;
+                        }
+                    } 
+                }
+
+                expr = Expr::Call(Box::new(expr), args);
+            } else if self.match_token(TokenOther::ColonColon).is_some() {
+                todo!()
+            } else {
+                break
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_secondary_expr(&mut self) -> Result<Expr, ()> {
         if self.match_token(TokenOther::Dot).is_some() {
             self.expect_token(TokenOther::OParen)?;
             self.expect_token(TokenOther::CParen)?;
@@ -204,11 +248,19 @@ impl Parser<'_> {
             }
 
             Ok(Expr::Block(body, return_expr))
+        } else if self.match_token(TokenOther::TypeUInt64).is_some() {
+            Ok(Expr::TypeUInt64)
+        } else if self.match_token(TokenOther::TypeString).is_some() {
+            Ok(Expr::TypeString)
         } else if let Some(token) = self.tok.peek() {
             match token {
                 Token::IntLiteral(int) => {
                     self.tok.next();
                     Ok(Expr::IntLit(*int))
+                }
+                Token::StringLiteral(string) => {
+                    self.tok.next();
+                    Ok(Expr::StringLit(string.clone()))
                 }
                 Token::Ident(name) => {
                     self.tok.next();

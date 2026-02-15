@@ -45,14 +45,65 @@ impl<'a> IROptimizer<'a> {
                     continue
                 },
 
+                IRNode::StackAlloc(size) => match self.cprog.node_clone_at(i+1) {
+
+                    IRNode::StackAlloc(other_size) => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        self.cprog.insert_node(i, IRNode::StackAlloc(size + other_size));
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    IRNode::StackDealloc(other_size) => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        if size > other_size {
+                            self.cprog.insert_node(i, IRNode::StackAlloc(size - other_size));
+                        } else {
+                            self.cprog.insert_node(i, IRNode::StackDealloc(other_size - size));
+                        }
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    IRNode::Load64ToStack(int, 0) if size == 8 => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        self.cprog.insert_node(i, IRNode::Push64(int));
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    _ => (),
+                },
+
+                IRNode::StackDealloc(size) => match self.cprog.node_clone_at(i+1) {
+
+                    IRNode::StackDealloc(other_size) => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        self.cprog.insert_node(i, IRNode::StackDealloc(size + other_size));
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    IRNode::StackAlloc(other_size) => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        if size > other_size {
+                            self.cprog.insert_node(i, IRNode::StackDealloc(size - other_size));
+                        } else {
+                            self.cprog.insert_node(i, IRNode::StackAlloc(other_size - size));
+                        }
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    _ => (),
+                },
+
                 IRNode::Push64(int) => match self.cprog.node_clone_at(i+1) {
 
-                    IRNode::StackDealloc(size) => {
-                        if size == 8 {
-                            self.cprog.shift_nodes(i..=(i+1));
-                            optimize_count += 1;
-                            continue
-                        }
+                    IRNode::StackDealloc(8) => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        optimize_count += 1;
+                        continue
                     },
 
                     IRNode::Pop64ToStack(offset) => {
@@ -65,28 +116,12 @@ impl<'a> IROptimizer<'a> {
                     _ => (),
                 },
 
-                IRNode::StackAlloc(8) => match self.cprog.node_clone_at(i+1) {
-
-                    IRNode::Load64ToStack(int, offset) => {
-                        if offset == 0 {
-                            self.cprog.shift_nodes(i..=(i+1));
-                            self.cprog.insert_node(i, IRNode::Push64(int));
-                            optimize_count += 1;
-                            continue
-                        }
-                    },
-
-                    _ => (),
-                },
-
                 IRNode::GlobalReadPush64(global_pos) => match self.cprog.node_clone_at(i+1) {
 
-                    IRNode::StackDealloc(size) => {
-                        if size == 8 {
-                            self.cprog.shift_nodes(i..=(i+1));
-                            optimize_count += 1;
-                            continue
-                        }
+                    IRNode::StackDealloc(8) => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        optimize_count += 1;
+                        continue
                     },
 
                     IRNode::Pop64ToStack(offset) => {
@@ -99,17 +134,32 @@ impl<'a> IROptimizer<'a> {
                     _ => (),
                 },
 
-                IRNode::StackReadPush64(_offset) => match self.cprog.node_clone_at(i+1) {
+                IRNode::StackReadPush64(src_offset) => match self.cprog.node_clone_at(i+1) {
 
-                    IRNode::StackDealloc(size) => {
-                        if size == 8 {
-                            self.cprog.shift_nodes(i..=(i+1));
-                            optimize_count += 1;
-                            continue
-                        }
+                    IRNode::StackDealloc(8) => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        optimize_count += 1;
+                        continue
                     },
 
-                    IRNode::Pop64ToStack(_offset) => println!("TODO optimize (StackReadPush64, Pop64ToStack) -> StackReadLoad64ToStack"),
+                    IRNode::Pop64ToStack(dst_offset) => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        self.cprog.insert_node(i, IRNode::StackReadLoad64ToStack(src_offset, dst_offset - 8));
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    _ => (),
+                },
+
+                IRNode::PushAddressFromOffset(offset) => match self.cprog.node_clone_at(i+1) {
+
+                    IRNode::Call => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        self.cprog.insert_node(i, IRNode::CallFromOffset(offset + 1));
+                        optimize_count += 1;
+                        continue;
+                    },
 
                     _ => (),
                 },

@@ -24,6 +24,16 @@ impl<'a> Scope<'a> {
         None
     }
 
+    pub fn lookup_mut(&mut self, name: &str) -> Option<&mut Variable<'a>> {
+        for var in &mut self.vars {
+            if var.name == name {
+                return Some(var)
+            }
+        }
+        
+        None
+    }
+
     pub fn add(&mut self, var: Variable<'a>) {
         self.vars.push_front(var);
     }

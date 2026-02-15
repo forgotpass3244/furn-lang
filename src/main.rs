@@ -33,6 +33,10 @@ fn main() {
     let mut ir_optimizer = IROptimizer::new(&mut cprog);
     let cprog = ir_optimizer.optimize();
 
+    for node in cprog.ir_iter() {
+        println!("{node:?} ");
+    }
+
     let duration = start.elapsed();
     println!(":: IR compilation took {}mcs to complete.", duration.as_micros());
 
@@ -48,7 +52,10 @@ fn main() {
 
     match assembler.output().expect("Assembler command failed to start (make sure you have NASM installed)").status.code() {
         Some(0) => println!(":: Linking object files..."),
-        _ => println!(":: Assembler errors ^^^^^^^^^^^^^^^^^^^^"),
+        _ => {
+            println!(":: Assembler errors ^^^^^^^^^^^^^^^^^^^^");
+            return
+        },
     }
 
     let mut linker = Command::new("ld");
