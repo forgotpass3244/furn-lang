@@ -5,16 +5,23 @@ use crate::{lexer::tokens::{Token, Tokens, TokensIterator}, parser::ast::{Expr, 
 
 pub struct Parser<'a> {
     tok: Peekable<TokensIterator<'a, TokenOther>>,
+    err_count: usize,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a Tokens<TokenOther>) -> Self {
         Self {
             tok: tokens.iter().peekable(),
+            err_count: 0,
         }
     }
+    
+    pub fn has_errors(&self) -> bool {
+        self.err_count > 0
+    }
 
-    fn emit_error(&self, message: &str) {
+    fn emit_diagnostic(&mut self, message: &str) {
+        self.err_count += 1;
         println!("{message}");
     }
 
@@ -51,50 +58,71 @@ impl<'a> Parser<'a> {
         }
     }
 
-    #[warn(unused_results)]
     fn match_terminator(&mut self) -> Option<&TokenOther> {
         self.match_token(TokenOther::Semicolon)
     }
 
-    fn expect_token(&mut self, expected: TokenOther) -> Result<(), ()> {
-        if self.match_token(expected).is_some() {
-            Ok(())
-        } else {
-            self.emit_error("wrong token lol");
-            Err(())
+    fn expect_token(&mut self, expected: TokenOther) {
+        if self.match_token(expected).is_none() {
+            self.emit_diagnostic("wrong token lol");
         }
     }
 
-    fn expect_terminator(&mut self) -> Result<(), ()> {
+    #[allow(dead_code)]
+    fn expect_terminator(&mut self) {
+        if self.match_terminator().is_none() {
+            self.emit_diagnostic("expected terminator: `;`");
+        }
+    }
+
+    fn unnecessary_terminator(&mut self) {
         if self.match_terminator().is_some() {
-            Ok(())
-        } else {
-            self.emit_error("expected terminator: `;`");
-            Err(())
+            self.emit_diagnostic("unnecessary terminator `;`, remove it");
         }
     }
 
-    fn parse_name(&mut self) -> Result<String, ()> {
+    fn parse_name(&mut self) -> String {
         match self.tok.peek() {
             Some(token) => match token {
                 Token::Ident(name) => {
                     self.tok.next();
-                    Ok(name.clone())
+                    name.clone()
                 },
-                _ => Err(()),
+                
+                _ => {
+                    self.emit_diagnostic("expected name");
+                    "(err)".to_string()
+                },
             },
 
-            None => Err(()),
+            None => {
+                self.emit_diagnostic("expected name, but got EOF");
+                "(eof)".to_string()
+            },
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Stmt>, ()> {
+    fn is_name(&mut self) -> bool {
+        match self.tok.peek() {
+            Some(token) => match token {
+                Token::Ident(..) => true,
+                _ => false,
+            },
+
+            None => false,
+        }
+    }
+
+    pub fn parse(&mut self) -> Vec<Stmt> {
         let mut ast = Vec::new();
         while self.tok.peek().is_some() {
-            let stmt = self.parse_stmt()?;
-            ast.push(stmt);
+            let stmt = self.parse_stmt();
+            if let Ok(stmt) = stmt {
+                ast.push(stmt);
+            }
         }
-        Ok(ast)
+        
+        ast
     }
 }
 
@@ -111,9 +139,27 @@ impl Parser<'_> {
             } else {
                 self.parse_const_decl(true)
             }
+        } else if self.match_token(TokenOther::Alias).is_some() {
+
+            let expr = self.parse_primary_expr2()?;
+            let is_call = if self.match_token(TokenOther::OParen).is_some() {
+                self.expect_token(TokenOther::CParen);
+                true
+            } else {
+                false
+            };
+
+            if self.match_token(TokenOther::As).is_some() {
+                let name = self.parse_name();
+                self.expect_terminator();
+                Ok(Stmt::AliasDecl(Some(name), expr, is_call))
+            } else {
+                self.expect_terminator();
+                Ok(Stmt::AliasDecl(None, expr, is_call))
+            }
         } else if self.match_token(TokenOther::Package).is_some() {
-            let name = self.parse_name()?;
-            self.expect_terminator()?;
+            let name = self.parse_name();
+            self.expect_terminator();
             Ok(Stmt::PackageDecl(name))
         } else {
 
@@ -122,10 +168,10 @@ impl Parser<'_> {
             let is_final_expr = if self.is_token(TokenOther::CBrace) {
                 true
             } else if expr.is_block() {
-                self.match_terminator();
+                self.unnecessary_terminator();
                 false
             } else {
-                self.expect_terminator()?;
+                self.expect_terminator();
                 false
             };
 
@@ -133,62 +179,68 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_const_decl(&mut self, is_exported: bool) -> Result<Stmt, ()>{
-        let name = self.parse_name()?;
+    fn parse_const_decl(&mut self, is_exported: bool) -> Result<Stmt, ()> {
+        let name = self.parse_name();
 
-        let mut type_expr = None;
-        if self.match_token(TokenOther::Colon).is_some() {
-            type_expr = Some(self.parse_expr()?);
-        }
+        let type_expr = if !self.is_terminator() && !self.is_token(TokenOther::Equal) {
+            Some(self.parse_type_expr()?)
+        } else {
+            None
+        };
 
         if self.match_terminator().is_some() {
             Ok(Stmt::ConstDecl(name, None, type_expr, is_exported))
         } else if self.match_token(TokenOther::Equal).is_some() {
             let expr = self.parse_expr()?;
             if expr.is_block() {
-                self.match_terminator();
+                self.unnecessary_terminator();
             } else {
-                self.expect_terminator()?;
+                self.expect_terminator();
             }
             Ok(Stmt::ConstDecl(name, Some(expr), type_expr, is_exported))
         } else {
-            self.emit_error("expected one of `;`, `:` or `=`");
-            Err(())
+            self.emit_diagnostic("expected one of `;`, `:` or `=`");
+            Ok(Stmt::ConstDecl(name, None, type_expr, is_exported))
         }
     }
     
-    fn parse_var_decl(&mut self, is_exported: bool) -> Result<Stmt, ()>{
-        let name = self.parse_name()?;
+    fn parse_var_decl(&mut self, is_exported: bool) -> Result<Stmt, ()> {
+        let name = self.parse_name();
 
-        let mut type_expr = None;
-        if self.match_token(TokenOther::Colon).is_some() {
-            type_expr = Some(self.parse_expr()?);
-        }
+        let type_expr = if !self.is_terminator() && !self.is_token(TokenOther::Equal) {
+            Some(self.parse_type_expr()?)
+        } else {
+            None
+        };
 
         if self.match_terminator().is_some() {
             Ok(Stmt::VarDecl(name, None, type_expr, is_exported))
         } else if self.match_token(TokenOther::Equal).is_some() {
             let expr = self.parse_expr()?;
             if expr.is_block() {
-                self.match_terminator();
+                self.unnecessary_terminator();
             } else {
-                self.expect_terminator()?;
+                self.expect_terminator();
             }
             Ok(Stmt::VarDecl(name, Some(expr), type_expr, is_exported))
         } else {
-            self.emit_error("expected one of `;`, `:` or `=`");
-            Err(())
+            self.emit_diagnostic("expected one of `;`, `:` or `=`");
+            Ok(Stmt::VarDecl(name, None, type_expr, is_exported))
         }
     }
 }
 
 impl Parser<'_> {
+    fn parse_type_expr(&mut self) -> Result<Expr, ()> {
+        self.parse_primary_expr()
+    }
+
     fn parse_expr(&mut self) -> Result<Expr, ()> {
         self.parse_primary_expr()
     }
 
     fn parse_primary_expr(&mut self) -> Result<Expr, ()> {
-        let mut expr = self.parse_secondary_expr()?;
+        let mut expr = self.parse_primary_expr2()?;
         loop {
             if self.match_token(TokenOther::OParen).is_some() {
                 // parse args
@@ -201,14 +253,37 @@ impl Parser<'_> {
                         args.push(arg);
 
                         if !self.is_token(TokenOther::CParen) {
-                            self.expect_token(TokenOther::Comma)?;
+                            self.expect_token(TokenOther::Comma);
                         }
                     } 
                 }
 
                 expr = Expr::Call(Box::new(expr), args);
-            } else if self.match_token(TokenOther::ColonColon).is_some() {
-                todo!()
+            } else {
+                break
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_primary_expr2(&mut self) -> Result<Expr, ()> {
+        if self.match_token(TokenOther::Ampersand).is_some() {
+            let ref_expr = self.parse_primary_expr2()?;
+            return Ok(Expr::Reference(Box::new(ref_expr)))
+        } else if self.match_token(TokenOther::Star).is_some() {
+            let deref_expr = self.parse_primary_expr2()?;
+            return Ok(Expr::Dereference(Box::new(deref_expr)))
+        }
+        
+        let mut expr = self.parse_secondary_expr()?;
+        loop {
+            if self.match_token(TokenOther::ColonColon).is_some() {
+                let name = self.parse_name();
+                expr = Expr::NamespaceAccess(Box::new(expr), name);
+            } else if self.match_token(TokenOther::Ampersand).is_some() {
+                let ref_expr = self.parse_primary_expr2()?;
+                expr = Expr::Reference(Box::new(ref_expr));
             } else {
                 break
             }
@@ -218,11 +293,69 @@ impl Parser<'_> {
     }
 
     fn parse_secondary_expr(&mut self) -> Result<Expr, ()> {
-        if self.match_token(TokenOther::Dot).is_some() {
-            self.expect_token(TokenOther::OParen)?;
-            self.expect_token(TokenOther::CParen)?;
-            let expr = self.parse_expr()?;
-            Ok(Expr::Function(Box::new(expr)))
+        if self.match_token(TokenOther::OParen).is_some() {
+            let mut temp_tok = self.tok.clone();
+            temp_tok.next();
+
+            let next_is_colon = match temp_tok.peek() {
+                Some(Token::Other(TokenOther::Colon)) => true,
+                _ => false,
+            };
+
+            if self.is_token(TokenOther::CParen) || (self.is_name() && next_is_colon) {
+                let mut params = Vec::new();
+                if self.match_token(TokenOther::CParen).is_none() {
+                    
+                    let name = self.parse_name();
+                    self.expect_token(TokenOther::Colon);
+                    let type_expr = self.parse_type_expr()?;
+                    params.push(Stmt::ConstDecl(name, None, Some(type_expr), false));
+
+                    loop {
+                        if self.match_token(TokenOther::Comma).is_some() {
+                            let name = self.parse_name();
+                            self.expect_token(TokenOther::Colon);
+                            let type_expr = self.parse_type_expr()?;
+                            params.push(Stmt::ConstDecl(name, None, Some(type_expr), false));
+                        } else {
+                            self.expect_token(TokenOther::CParen);
+                            break
+                        }
+                    }
+                }
+
+                let return_type = if self.match_token(TokenOther::Colon).is_some() {
+                    Some(Box::new(self.parse_type_expr()?))
+                } else {
+                    None
+                };
+
+                let expr = self.parse_expr()?;
+                if return_type.is_some() && !expr.is_block() {
+                    self.emit_diagnostic("expected block after return type");
+                    Err(())
+                } else {
+                    Ok(Expr::Function(Box::new(expr), return_type, params))
+                }
+            } else {
+                todo!()
+            }
+        } else if self.match_token(TokenOther::OParen).is_some() {
+            self.expect_token(TokenOther::CParen);
+            Ok(Expr::TypeUnit)
+        } else if self.match_token(TokenOther::If).is_some() {
+            self.expect_token(TokenOther::OParen);
+            let condition = self.parse_expr()?;
+            self.expect_token(TokenOther::CParen);
+
+            let body = self.parse_expr()?;
+            let else_body = if self.match_token(TokenOther::Else).is_some() {
+                Some(Box::new(self.parse_expr()?))
+            } else {
+                None
+            };
+
+            Ok(Expr::If(Box::new(condition), Box::new(body), else_body))
         } else if self.match_token(TokenOther::OBrace).is_some() {
 
             let mut body = Vec::new();

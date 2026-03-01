@@ -90,11 +90,9 @@ impl Lexer {
 
             if token_map.get(&key).is_some() {
                 self.advance();
-                break
-            } else if token_map.any_key(|k| k.starts_with(&key)) {
-                self.advance();
             } else {
-                return None
+                key.pop();
+                break
             }
         };
         

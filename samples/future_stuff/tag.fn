@@ -3,5 +3,5 @@ public tag RuntimeValue {
     Bool(bool)
     Char(char)
     Number(f32)
-    String(char[..])
+    String(char[])
 }

@@ -1,14 +1,14 @@
 
 
 #[derive(Debug, Clone)]
-pub struct ExternalInfo<'a> {
-    pub name: &'a str,
-    pub package_name: &'a str,
+pub struct ExternalInfo {
+    pub name: String,
+    pub package_name: String,
     pub is_const: bool,
 }
 
-impl<'a> ExternalInfo<'a> {
-    pub fn new(name: &'a str, package_name: &'a str, is_const: bool) -> Self {
+impl ExternalInfo {
+    pub fn new(name: String, package_name: String, is_const: bool) -> Self {
         Self {
             name,
             package_name,

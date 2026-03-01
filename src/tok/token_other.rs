@@ -9,6 +9,10 @@ pub enum TokenOther {
     Var,
     Public,
     Package,
+    Alias,
+    As,
+    If,
+    Else,
     TypeUInt64,
     TypeString,
 
@@ -23,6 +27,8 @@ pub enum TokenOther {
     ColonColon,
     Dot,
     Comma,
+    Ampersand,
+    Star,
 }
 
 impl TokenOther {
@@ -33,6 +39,10 @@ impl TokenOther {
         token_map.make_keyword("var", TokenOther::Var);
         token_map.make_keyword("public", TokenOther::Public);
         token_map.make_keyword("package", TokenOther::Package);
+        token_map.make_keyword("alias", TokenOther::Alias);
+        token_map.make_keyword("as", TokenOther::As);
+        token_map.make_keyword("if", TokenOther::If);
+        token_map.make_keyword("else", TokenOther::Else);
         token_map.make_keyword("u64", TokenOther::TypeUInt64);
         token_map.make_keyword("str", TokenOther::TypeString);
 
@@ -46,6 +56,8 @@ impl TokenOther {
         token_map.make("::", TokenOther::ColonColon);
         token_map.make(".", TokenOther::Dot);
         token_map.make(",", TokenOther::Comma);
+        token_map.make("&", TokenOther::Ampersand);
+        token_map.make("*", TokenOther::Star);
 
         token_map
     }
@@ -58,6 +70,10 @@ impl fmt::Display for TokenOther {
             TokenOther::Var => write!(f, "kw:var"),
             TokenOther::Public => write!(f, "kw:public"),
             TokenOther::Package => write!(f, "kw:package"),
+            TokenOther::Alias => write!(f, "kw:alias"),
+            TokenOther::As => write!(f, "kw:as"),
+            TokenOther::If => write!(f, "kw:if"),
+            TokenOther::Else => write!(f, "kw:else"),
             TokenOther::TypeUInt64 => write!(f, "kw:u64"),
             TokenOther::TypeString => write!(f, "kw:str"),
 
@@ -71,6 +87,8 @@ impl fmt::Display for TokenOther {
             TokenOther::ColonColon => write!(f, "'::'"),
             TokenOther::Dot => write!(f, "'.'"),
             TokenOther::Comma => write!(f, "','"),
+            TokenOther::Ampersand => write!(f, "'&'"),
+            TokenOther::Star => write!(f, "'*'"),
         }
     }
 }

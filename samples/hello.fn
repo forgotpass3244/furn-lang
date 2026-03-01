@@ -7,13 +7,13 @@ comment
 }
 
 # a `let` binding allows the compiler to perform comptime optimizations like value inlining
-let num = 67; # type annotation optional
-let get_num = .() { num };
+var num u64 = 9;
 
-let message: str = "hello, furn!\n";
+let newline = () Rt::print_char(10);
 
-public main = .() {
-    print(message);
-    print("exiting...!\n");
-    get_num()
+public main = () {
+    var x = 3;
+    let px = &x;
+    Rt::print_u64(*px);
+    newline()
 }

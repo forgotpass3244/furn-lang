@@ -8,7 +8,7 @@ let print = .(...select);
 
 impl print {
     n: i32 => putc(n + '0'),
-    s: char[] => puts(s),
+    s: str => puts(s),
 }
 
 # normal function

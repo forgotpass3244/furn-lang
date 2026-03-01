@@ -74,6 +74,7 @@ where T: fmt::Display {
     }
 }
 
+#[derive(Clone)]
 pub struct TokensIterator<'a, T> {
     tokens: &'a Tokens<T>,
     index: usize,
