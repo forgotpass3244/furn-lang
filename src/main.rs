@@ -1,7 +1,9 @@
-use std::{env::args, fs::{DirBuilder, File}, io::{BufWriter, Write}, process::{Command, Stdio}, time::Instant};
 
-use crate::{flags::{CompilationTarget, Flags}, ir_gen::{cmpld_program::CompiledProgram, ir_gen::IRGen, ir_optimizer::IROptimizer}, lexer::{lexer::Lexer, tokens::Tokens}, outputs::asm_x86_64::gen_asm_x86_64_from_ir, parser::parser::Parser, tok::token_other::TokenOther};
+use std::{env::{self, args}, fs::{self, File}, io::{BufWriter, Write}, process::{Command, Stdio}, time::Instant, hint::black_box};
+
+use crate::{flags::{CompilationTarget, Flags}, ir_gen::{cmpld_program::CompiledProgram, ir_gen::IRGen, ir_optimizer::IROptimizer}, lexer::{lexer::Lexer, tokens::Tokens}, outputs::asm_x86_64::gen_asm_x86_64_from_ir, parser::parser::Parser, tok::token_other::TokenOther, maybe_inf::MaybeInf};
 pub mod flags;
+pub mod maybe_inf;
 pub mod lexer;
 pub mod tok;
 pub mod parser;
@@ -20,11 +22,12 @@ fn clear_lines(n: usize) {
     }
 }
 
-fn output_program(cprog: &CompiledProgram, target: CompilationTarget) {
-    let out_dir = DirBuilder::new();
-    _ = out_dir.create("furnbuild");
+fn output_program(cprog: &CompiledProgram, target: CompilationTarget, flags: &Flags) {
+    let mut out_dir = env::temp_dir();
+    out_dir.push("furn-build-artifacts");
+    _ = fs::create_dir(&out_dir);
     
-    let out_file = File::create("furnbuild/out.asm").unwrap();
+    let out_file = File::create(out_dir.join("out.asm")).unwrap();
     let mut buffer = BufWriter::new(out_file);
     
     match target {
@@ -36,7 +39,7 @@ fn output_program(cprog: &CompiledProgram, target: CompilationTarget) {
 
     let mut assembler = Command::new("nasm");
     assembler.stdout(Stdio::inherit()).stderr(Stdio::inherit());
-    assembler.arg("-felf64").arg("furnbuild/out.asm").arg("-ofurnbuild/out.o");
+    assembler.arg("-felf64").arg(out_dir.join("out.asm")).arg("-o".to_string() + out_dir.join("out.o").to_str().unwrap());
 
     match assembler.output().expect("Assembler command failed to start (make sure you have NASM installed)").status.code() {
         Some(0) => {
@@ -51,7 +54,16 @@ fn output_program(cprog: &CompiledProgram, target: CompilationTarget) {
 
     let mut linker = Command::new("ld");
     linker.stdout(Stdio::inherit()).stderr(Stdio::inherit());
-    linker.arg("rt.o").arg("furnbuild/out.o").arg("-ofurnbuild/out");
+    
+    let output_path = flags.output_file_name.clone().unwrap_or_else(|| {
+        flags.file_name.clone()
+        .unwrap_or("unnamed".to_string())
+        .rsplitn(2, ".").last().unwrap_or(
+            flags.file_name.clone()
+            .unwrap_or_default().as_str()
+        ).to_string()
+    });
+    linker.arg("rt.o").arg(out_dir.join("out.o")).arg("-o").arg(output_path);
 
     match linker.output().expect("Command ld failed to start").status.code() {
         Some(0) => {
@@ -64,14 +76,14 @@ fn output_program(cprog: &CompiledProgram, target: CompilationTarget) {
     clear_line();
 }
 
-fn main() {
-    let flags = Flags::parse_args(args());
+
+fn compile(flags: &Flags) {
     let start = Instant::now();
 
     println!(":: Lexing...");
 
     let token_map = TokenOther::make_token_map();
-    let mut lexer = Lexer::from_file(flags.file_name.unwrap().as_str());
+    let mut lexer = Lexer::from_file(flags.file_name.as_ref().unwrap().as_str());
     let tokens: Tokens<TokenOther> = lexer.tokenize(token_map);
 
     clear_line();
@@ -89,13 +101,24 @@ fn main() {
     println!(":: Generating IR...");
 
     let mut ir_gen = IRGen::new();
-    let mut cprog = ir_gen.generate(&ast);
+    let mut cprog = ir_gen.generate(&ast).clone();
+
+    if ir_gen.has_errors() {
+        return
+    }
 
     clear_line();
     println!(":: Optimizing IR...");
 
     let mut ir_optimizer = IROptimizer::new(&mut cprog);
-    let cprog = ir_optimizer.optimize(flags.optimization_level);
+    let cprog = match &flags.target {
+        Some(CompilationTarget::None) => if flags.optimization_level.is_some() {
+            ir_optimizer.optimize(flags.optimization_level)
+        } else {
+            ir_optimizer.optimize(Some(MaybeInf::NonInf(0)))
+        },
+        _ => ir_optimizer.optimize(flags.optimization_level),
+    };
 
     if flags.print_ir {
         clear_line();
@@ -110,18 +133,31 @@ fn main() {
     let duration = start.elapsed();
     clear_line();
 
-    if let Some(target) = flags.target {
+    if let Some(target) = &flags.target {
         match target {
             CompilationTarget::None => {
                 println!(":: IR compilation took {}ms to complete.", duration.as_millis());
             },
             _ => {
                 println!(":: IR compilation took {}ms to complete. Assembling...", duration.as_millis());
-                output_program(cprog, target)
+                output_program(cprog, target.clone(), &flags)
             },
         }
     } else {
         println!(":: IR compilation took {}ms to complete. Building...", duration.as_millis());
-        output_program(cprog, CompilationTarget::LinuxX86_64);
+        output_program(cprog, CompilationTarget::LinuxX86_64, &flags);
     }
 }
+
+fn main() {
+    let flags = Flags::parse_args(args());
+    for _ in 0..(flags.compile_iters.unwrap_or(1)) {
+        black_box(compile(&flags));
+    }
+}
+
+
+
+
+
+

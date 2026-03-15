@@ -2,25 +2,23 @@
 # to eventually be able to compile
 
 
-# function that selects the arm to call based on type at comptime
-# symbol names for each arm are based on the type
-let print = .(...select);
-
-impl print {
-    n: i32 => putc(n + '0'),
-    s: str => puts(s),
+# function that selects which function to call based on type at comptime
+# so basically a simpler approach to overloading
+let print :: select {
+    Rt.print_str(str),
+    Rt.print_u64(i32),
 }
 
 # normal function
-public main = .() {
+public main :: () {
     # constant folding at comptime removes calculating 7 + 2 at runtime
-    let x = 7 + 2; # immutable
+    let x :: 7 + 2; # immutable
 
     # function matches arm at comptime to reduce runtime overhead
     print(x);
 
     # mutable
-    var y = 100;
+    var y :: 100;
     ++y;
     y *= x;
 
@@ -30,3 +28,4 @@ public main = .() {
     # no semicolon = return, like rust
     0
 }
+

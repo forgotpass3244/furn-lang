@@ -1,22 +1,32 @@
 use std::collections::VecDeque;
 
-use crate::ir_gen::variable::Variable;
-
-#[derive(Clone)]
-pub struct Scope {
-    vars: VecDeque<Variable>,
+pub trait Named {
+    fn get_name(&self) -> &String;
 }
 
-impl Scope {
+#[derive(Clone)]
+pub struct Scope<T> {
+    vars: VecDeque<T>,
+}
+
+impl<T> Scope<T>
+where T: Named {
     pub fn new() -> Self {
         Self {
             vars: VecDeque::new(),
         }
     }
     
-    pub fn lookup(&self, name: &str) -> Option<&Variable> {
+    pub fn lookup(&self, name: &str) -> Option<&T> {
         for var in &self.vars {
-            if var.name == name {
+            let var_name = var.get_name();
+            if (
+                var_name.chars().nth(0).unwrap_or_default()
+                == name.chars().nth(0).unwrap_or_default()
+            ) && (
+                var_name.replace("_", "").to_lowercase()
+                == name.replace("_", "").to_lowercase()
+            ) {
                 return Some(&var)
             }
         }
@@ -24,9 +34,9 @@ impl Scope {
         None
     }
 
-    pub fn lookup_mut(&mut self, name: &str) -> Option<&mut Variable> {
+    pub fn lookup_mut(&mut self, name: &str) -> Option<&mut T> {
         for var in &mut self.vars {
-            if var.name == name {
+            if var.get_name() == name {
                 return Some(var)
             }
         }
@@ -34,11 +44,11 @@ impl Scope {
         None
     }
 
-    pub fn add(&mut self, var: Variable) {
+    pub fn add(&mut self, var: T) {
         self.vars.push_front(var);
     }
 
-    pub fn iter(&self) -> std::collections::vec_deque::Iter<'_, Variable> {
+    pub fn iter(&self) -> std::collections::vec_deque::Iter<'_, T> {
         self.vars.iter()
     }
 }

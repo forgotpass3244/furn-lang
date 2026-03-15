@@ -1,0 +1,19 @@
+
+let my_tag :: u64|str;
+
+# Example 3 — copy value instead of storing a short-lived reference
+let example_copy_value :: ()
+    var stored u64 :: 0;              # owns the value
+    do
+        var tmp :: 999;
+        stored = tmp;                 # copy the numeric value
+    end
+    print(stored);
+    8
+end
+
+public main :: ()
+    let a :: my_tag("hello");
+    let b :: a;
+    example_copy_value()
+end

@@ -2,4 +2,10 @@
 **/*.rs.bk
 Cargo.lock
 rt.o
-/furnbuild
+/furn-build-artifacts
+/.agent.md
+/flamegraph.svg
+/perf.data
+/perf.data.old
+/program
+/rt.o

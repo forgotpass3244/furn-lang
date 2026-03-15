@@ -1,18 +1,23 @@
 
 use std::{collections::VecDeque, env::Args};
+use crate::maybe_inf::MaybeInf;
 
+#[derive(Clone)]
 pub enum CompilationTarget {
     None,
     LinuxX86_64,
 }
 
+#[derive(Clone)]
 pub struct Flags {
     args: VecDeque<String>,
     pub program_name: String,
     pub file_name: Option<String>,
-    pub optimization_level: Option<u32>,
+    pub optimization_level: Option<MaybeInf<u32>>,
     pub target: Option<CompilationTarget>,
     pub print_ir: bool,
+    pub output_file_name: Option<String>,
+    pub compile_iters: Option<u64>,
 }
 
 impl Flags {
@@ -27,6 +32,8 @@ impl Flags {
             optimization_level: None,
             target: None,
             print_ir: false,
+            output_file_name: None,
+            compile_iters: None,
         }
     }
 
@@ -75,12 +82,15 @@ impl Flags {
                     let string = self.args.pop_front();
                     if let Some(string) = string {
                         let optimization_level: u32 = string.parse().unwrap_or_default();
-                        self.optimization_level = Some(optimization_level);
+                        self.optimization_level = Some(MaybeInf::NonInf(optimization_level));
                     }
                 }
 
-                "--print-ir" => {
-                    self.print_ir = true;
+                "-o" => {
+                    let string = self.args.pop_front();
+                    if let Some(string) = string {
+                        self.output_file_name = Some(string);
+                    }
                 }
 
                 "-T" => {
@@ -91,6 +101,22 @@ impl Flags {
                             "linux_x86_64" => Some(CompilationTarget::LinuxX86_64),
                             _ => None,
                         };
+                    }
+                }
+                
+                "--print-ir" => {
+                    self.print_ir = true;
+                }
+                
+                "--optimized" => {
+                    self.optimization_level = Some(MaybeInf::Inf);
+                }
+                
+                "--iterations" => {
+                    let string = self.args.pop_front();
+                    if let Some(string) = string {
+                        let compile_iters: u64 = string.parse().unwrap_or_default();
+                        self.compile_iters = Some(compile_iters);
                     }
                 }
 

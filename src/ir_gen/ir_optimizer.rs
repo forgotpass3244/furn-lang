@@ -1,5 +1,5 @@
 use crate::ir_gen::{cmpld_program::CompiledProgram, ir::IRNode};
-
+use crate::maybe_inf::MaybeInf;
 
 pub struct IROptimizer<'a> {
     cprog: &'a mut CompiledProgram<'a>,
@@ -12,12 +12,20 @@ impl<'a> IROptimizer<'a> {
         }
     }
 
-    pub fn optimize(&mut self, max_passes: Option<u32>) -> &CompiledProgram<'a> {
+    pub fn optimize(&mut self, max_passes: Option<MaybeInf<u32>>) -> &CompiledProgram<'a> {
         if let Some(max_passes) = max_passes {
-            for _ in 0..max_passes {
-                if self.do_pass() <= 0 {
-                    break
-                }
+            match max_passes {
+                MaybeInf::NonInf(max_passes) => for _ in 0..max_passes {
+                    if self.do_pass() <= 0 {
+                        break
+                    }
+                },
+                
+                MaybeInf::Inf => loop {
+                    if self.do_pass() <= 0 {
+                        break
+                    }
+                },
             }
         } else {
             loop {
@@ -27,6 +35,7 @@ impl<'a> IROptimizer<'a> {
             }
         }
 
+        self.post_optimization_remove_nop_nodes();
         self.cprog
     }
 
@@ -80,7 +89,7 @@ impl<'a> IROptimizer<'a> {
                         continue
                     },
 
-                    _ => (),
+                    _ => {},
                 },
 
                 IRNode::StackDealloc(size) => match self.cprog.node_clone_at(i+1) {
@@ -103,7 +112,7 @@ impl<'a> IROptimizer<'a> {
                         continue
                     },
 
-                    _ => (),
+                    _ => {},
                 },
 
                 IRNode::Push64(int) => match self.cprog.node_clone_at(i+1) {
@@ -121,7 +130,14 @@ impl<'a> IROptimizer<'a> {
                         continue
                     },
 
-                    _ => (),
+                    IRNode::StackReadPush64(offset) if offset == 0 => {
+                        self.cprog.shift_nodes((i+1)..=(i+1));
+                        self.cprog.insert_node(i, IRNode::Push64(int));
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    _ => {},
                 },
 
                 IRNode::GlobalReadPush64(global_pos) => match self.cprog.node_clone_at(i+1) {
@@ -139,13 +155,14 @@ impl<'a> IROptimizer<'a> {
                         continue
                     },
 
-                    _ => (),
+                    _ => {},
                 },
 
                 IRNode::StackReadPush64(src_offset) => match self.cprog.node_clone_at(i+1) {
 
-                    IRNode::StackDealloc(8) => {
+                    IRNode::StackDealloc(size) if size > 8 => {
                         self.cprog.shift_nodes(i..=(i+1));
+                        self.cprog.insert_node(i, IRNode::StackDealloc(size - 8));
                         optimize_count += 1;
                         continue
                     },
@@ -157,7 +174,14 @@ impl<'a> IROptimizer<'a> {
                         continue
                     },
 
-                    _ => (),
+                    IRNode::Deref64 => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        self.cprog.insert_node(i, IRNode::StackDeref64(src_offset));
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    _ => {},
                 },
 
                 IRNode::PushAddressFromOffset(offset) => match self.cprog.node_clone_at(i+1) {
@@ -166,10 +190,10 @@ impl<'a> IROptimizer<'a> {
                         self.cprog.shift_nodes(i..=(i+1));
                         self.cprog.insert_node(i, IRNode::CallFromOffset(offset + 1));
                         optimize_count += 1;
-                        continue;
+                        continue
                     },
 
-                    _ => (),
+                    _ => {},
                 },
 
                 IRNode::ExternalReadPush64(external) => match self.cprog.node_clone_at(i+1) {
@@ -178,13 +202,25 @@ impl<'a> IROptimizer<'a> {
                         self.cprog.shift_nodes(i..=(i+1));
                         self.cprog.insert_node(i, IRNode::ExternalReadCall(external));
                         optimize_count += 1;
-                        continue;
+                        continue
                     },
 
-                    _ => (),
+                    _ => {},
                 },
 
-                _ => (),
+                IRNode::PushStackPointer(offset) => match self.cprog.node_clone_at(i+1) {
+
+                    IRNode::Deref64 => {
+                        self.cprog.shift_nodes(i..=(i+1));
+                        self.cprog.insert_node(i, IRNode::StackReadPush64(offset));
+                        optimize_count += 1;
+                        continue
+                    },
+
+                    _ => {},
+                },
+
+                _ => {},
             }
 
             i += 1;
@@ -192,6 +228,21 @@ impl<'a> IROptimizer<'a> {
         }
 
         optimize_count
+    }
+
+    fn post_optimization_remove_nop_nodes(&mut self) {
+        let mut i = 0;
+        while i < self.cprog.count_ir() {
+            match self.cprog.node_clone_at(i) {
+                IRNode::Nop => {
+                    self.cprog.shift_nodes(i..=(i));
+                    continue
+                },
+                _ => {},
+            }
+
+            i += 1;
+        }
     }
 }
 

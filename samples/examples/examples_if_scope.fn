@@ -1,0 +1,21 @@
+
+# Example — lifetimes across `if` branches
+let lifetimes_if :: ()
+    var x :: 1;
+    var p *u64 :: &x;   # p borrows `x`
+
+    if (x - 1)
+        var inner :: 10;
+        # p = &inner; # error: `inner` doesn't live long enough for `p`
+    else
+        # safe: do nothing
+        print("else branch");
+    end
+
+    Rt.print_str("*p = "); # Rt.print_str
+    print(*p);
+end
+
+public main :: ()
+    lifetimes_if()
+end

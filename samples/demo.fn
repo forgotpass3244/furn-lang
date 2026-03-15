@@ -1,0 +1,34 @@
+
+# let Buffer :: class {
+#     data *u8,
+#     len u64,
+# }
+
+# var buf Buffer; # error, "zeroval not allowed for type `Buffer` since one of its fields `data` is type `*u8`"
+
+package Main; # optional here since only the main function is exported
+
+# let is const, var is mutable
+let hello :: "hello, world!";
+public main :: () :u64: # (optional, type is inferred)
+    # :: for initialization, = for reassignment
+    var message :: "init message lol";
+    void(message); # literally does nothing
+
+    print(message);
+    message = hello;
+
+    var num :: 60;
+    var my_ptr *u64 :: &num;
+    do
+        var inner_num :: 100; # destroying once it hits the end for this block 
+        # my_ptr = &inner_num; # ❗ lifetime may not live long enough
+    end
+
+    print(void);
+    print(message); # @postfn(void);
+    print(num);
+
+    print("goodbye!");
+    num - 5 # blocks are expressions like rust
+end # lua-style block syntax

@@ -1,0 +1,11 @@
+
+# Example 1 — safe reference used within same scope
+let example_safe_ref :: ()
+    var x :: 42;
+    var p *u64 :: &x;    # borrow `x` while both live
+    print(*p);
+end
+
+public main :: ()
+    example_safe_ref()
+end

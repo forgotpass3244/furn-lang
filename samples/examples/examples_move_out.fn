@@ -1,0 +1,16 @@
+
+# Example 2 — move the referent out so pointer remains valid
+let example_move_out :: ()
+    var outer :: 10;
+    var p *u64 :: &outer;
+    do
+        var inner :: 5;
+        # safe: we don't assign `&inner` to `p`
+        print(*p);
+    end
+    print(*p);
+end
+
+public main :: ()
+    example_move_out()
+end

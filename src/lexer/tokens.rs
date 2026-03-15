@@ -2,8 +2,8 @@ use core::fmt;
 use std::ops::Index;
 
 
-#[derive(PartialEq)]
-pub enum Token<T> {
+#[derive(PartialEq, Clone)]
+pub enum TokenEnum<T> {
     Ident(String),
     StringLiteral(String),
     CharLiteral(String),
@@ -12,23 +12,65 @@ pub enum Token<T> {
     Other(T),
 }
 
-impl<T> Token<T> {
+impl<T> TokenEnum<T>
+where T: Clone {
     pub fn from_other(other: T) -> Self {
-        Self::Other(other)
+        TokenEnum::Other(other)
+    }
+
+    pub fn to_tok(self, loc: SourceLocation) -> Token<T> {
+        Token {
+            t_enum: self,
+            loc,
+        }
+    }
+}
+
+pub struct Token<T> {
+    t_enum: TokenEnum<T>,
+    loc: SourceLocation,
+}
+
+impl<T> Token<T> {
+    pub fn as_enum(&self) -> &TokenEnum<T> {
+        &self.t_enum
+    }
+
+    pub fn get_loc(&self) -> SourceLocation {
+        self.loc
     }
 }
 
 impl<T> fmt::Display for Token<T>
 where T: fmt::Display {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Token::Ident(string) => write!(f, "{string}"),
-            Token::StringLiteral(string) => write!(f, "\"{string}\""),
-            Token::CharLiteral(string) => write!(f, "'{string}'"),
-            Token::IntLiteral(int) => write!(f, "{int}i"),
-            Token::FloatLiteral(float) => write!(f, "{float}f"),
-            Token::Other(x) => write!(f, "{x}"),
+        match self.as_enum() {
+            TokenEnum::Ident(string) => write!(f, "`{string}`"),
+            TokenEnum::StringLiteral(string) => write!(f, "\"{string}\""),
+            TokenEnum::CharLiteral(string) => write!(f, "'{string}'"),
+            TokenEnum::IntLiteral(int) => write!(f, "`{int}`"),
+            TokenEnum::FloatLiteral(float) => write!(f, "`{float}`"),
+            TokenEnum::Other(x) => write!(f, "'{x}'"),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SourceLocation {
+    pub line: isize,
+    pub col: isize,
+}
+
+impl SourceLocation {
+    pub fn new(line: isize, col: isize) -> Self {
+        Self {
+            line,
+            col,
+        }
+    }
+
+    pub fn garbage() -> Self {
+        Self::new(-1, -1)
     }
 }
 

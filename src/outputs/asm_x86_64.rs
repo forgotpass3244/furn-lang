@@ -7,13 +7,13 @@ use crate::ir_gen::ir::IRNode;
 
 
 pub fn gen_asm_x86_64_from_ir(out: &mut BufWriter<File>, cprog: &CompiledProgram) -> Result<(), std::io::Error> {
-    let package_name = cprog.get_package_name().unwrap_or("main");
+    let package_name = cprog.get_package_name().unwrap_or("Main");
 
     for external in cprog.externals_iter() {
         if external.is_const {
-            writeln!(out, "extern PKG_{}_{}", external.package_name, external.name)?;
+            writeln!(out, "extern {}?{}", external.package_name, external.name)?;
         } else {
-            writeln!(out, "extern PKGv_{}_{}", external.package_name, external.name)?;
+            writeln!(out, "extern {}${}", external.package_name, external.name)?;
         }
     }
 
@@ -34,17 +34,17 @@ pub fn gen_asm_x86_64_from_ir(out: &mut BufWriter<File>, cprog: &CompiledProgram
     
     writeln!(out, "section .data")?;
     for global in cprog.globals_iter() {
-        let pkg_prefix = if global.is_const { "PKG" } else { "PKGv" };
+        let pkg_sep = if global.is_const { '?' } else { '$' };
 
         if global.is_exported {
-            writeln!(out, "global {pkg_prefix}_{package_name}_{}", global.name)?;
-            writeln!(out, "{pkg_prefix}_{package_name}_{} equ GLOB_{}", global.name, global.pos)?;
+            writeln!(out, "global {package_name}{pkg_sep}{}", global.name)?;
+            writeln!(out, "{package_name}{pkg_sep}{} equ GLOB_{}", global.name, global.pos)?;
         }
 
         if global.is_const {
 
             match global.init {
-                CTimeVal::UInt(int) => writeln!(out, "GLOB_{} equ {int}", global.pos)?,
+                CTimeVal::Int(int) => writeln!(out, "GLOB_{} equ {int}", global.pos)?,
                 CTimeVal::Function { address, .. } => writeln!(out, "GLOB_{} equ OP_{address}", global.pos)?,
                 CTimeVal::StringSlice(pointer, len) => {
                     writeln!(out, "GLOB_{} equ STR_{pointer}", global.pos)?;
@@ -56,7 +56,7 @@ pub fn gen_asm_x86_64_from_ir(out: &mut BufWriter<File>, cprog: &CompiledProgram
         } else {
 
             match global.init {
-                CTimeVal::UInt(int) => writeln!(out, "GLOB_{}: dq {int}", global.pos)?,
+                CTimeVal::Int(int) => writeln!(out, "GLOB_{}: dq {int}", global.pos)?,
                 CTimeVal::Function { address, .. } => writeln!(out, "GLOB_{}: dq OP_{address}", global.pos)?,
                 CTimeVal::StringSlice(pointer, len) => {
                     write!(out, "GLOB_{}: ", global.pos)?;
@@ -74,6 +74,7 @@ pub fn gen_asm_x86_64_from_ir(out: &mut BufWriter<File>, cprog: &CompiledProgram
 
     for (i, node) in cprog.ir_iter().enumerate() {
         match node {
+            IRNode::Nop => unreachable!(), // not an actual nop instruction, just a denotion for the optimizer
             IRNode::Return { params_size: 0 } => writeln!(out, "    OP_{i}: ret")?,
             IRNode::Return { params_size } => writeln!(out, "    OP_{i}: ret {params_size}")?,
             IRNode::CallFromOffset(offset) => writeln!(out, "    OP_{i}: call OP_{}", (i as i64) + offset)?,
@@ -89,17 +90,17 @@ pub fn gen_asm_x86_64_from_ir(out: &mut BufWriter<File>, cprog: &CompiledProgram
             
             IRNode::ExternalReadPush64(external) => {
                 if external.is_const {
-                    writeln!(out, "    OP_{i}: push PKG_{}_{}", external.package_name, external.name)?;
+                    writeln!(out, "    OP_{i}: push {}?{}", external.package_name, external.name)?;
                 } else {
-                    writeln!(out, "    OP_{i}: push qword [PKGv_{}_{}]", external.package_name, external.name)?;
+                    writeln!(out, "    OP_{i}: push qword [{}${}]", external.package_name, external.name)?;
                 }
             },
 
             IRNode::ExternalReadCall(external) => {
                 if external.is_const {
-                    writeln!(out, "    OP_{i}: call PKG_{}_{}", external.package_name, external.name)?;
+                    writeln!(out, "    OP_{i}: call {}?{}", external.package_name, external.name)?;
                 } else {
-                    writeln!(out, "    OP_{i}: call qword [PKGv_{}_{}]", external.package_name, external.name)?;
+                    writeln!(out, "    OP_{i}: call qword [{}${}]", external.package_name, external.name)?;
                 }
             },
 
@@ -144,6 +145,28 @@ pub fn gen_asm_x86_64_from_ir(out: &mut BufWriter<File>, cprog: &CompiledProgram
                 writeln!(out, "OP_{i}:")?;
                 writeln!(out, "    pop rax")?;
                 writeln!(out, "    push qword [rax]")?;
+            },
+
+            IRNode::StackDeref64(offset) => {
+                writeln!(out, "OP_{i}:")?;
+                writeln!(out, "    mov rax, [rsp+{offset}]")?;
+                writeln!(out, "    push qword [rax]")?;
+            },
+
+            IRNode::Add64 => {
+                writeln!(out, "OP_{i}:")?;
+                writeln!(out, "    pop rbx")?;
+                writeln!(out, "    pop rax")?;
+                writeln!(out, "    add rax, rbx")?;
+                writeln!(out, "    push rax")?;
+            },
+
+            IRNode::Sub64 => {
+                writeln!(out, "OP_{i}:")?;
+                writeln!(out, "    pop rbx")?;
+                writeln!(out, "    pop rax")?;
+                writeln!(out, "    sub rax, rbx")?;
+                writeln!(out, "    push rax")?;
             },
         }
     }

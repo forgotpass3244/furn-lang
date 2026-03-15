@@ -1,0 +1,17 @@
+# Example — aliasing and `unsafe` to bypass checks
+# Use `unsafe {}` only when you accept undefined behavior.
+let alias_and_unsafe :: ()
+    var p *u64 :: null;
+
+    unsafe {
+        var short :: 9;
+        p = &short;   # allowed in `unsafe` but dangling after block
+    }
+
+    # compiler won't stop you (because it was `unsafe`), but deref is UB
+    # print(*p);
+end
+
+public main :: ()
+    alias_and_unsafe()
+end

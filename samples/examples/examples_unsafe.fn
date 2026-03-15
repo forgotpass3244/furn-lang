@@ -1,0 +1,19 @@
+
+# Example 4 — using an `unsafe` block to bypass lifetime checks (allows unsafe aliasing)
+# Note: this compiles only if you accept unsafe behavior.
+let example_unsafe_alias :: ()
+    unsafe
+        var p *u64 :: 0;
+        do
+            var short_lived :: 7;
+            p = &short_lived;   # allowed in `unsafe`, but it's a dangling pointer after the block
+        end
+        # dereferencing `p` here is undefined behavior at runtime
+        print(*p); # maybe 7, maybe garbage, its UB
+    end
+end
+
+public main :: ()
+    example_unsafe_alias()
+end
+

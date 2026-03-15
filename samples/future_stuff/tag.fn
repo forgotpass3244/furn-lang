@@ -1,7 +1,18 @@
 
-public tag RuntimeValue {
-    Bool(bool)
-    Char(char)
-    Number(f32)
-    String(char[])
+public RuntimeValue :: bool
+| char
+| f32
+| str;
+
+public main :: () {
+    let result u64|str :: get_age("john");
+    let age :: select (result) {
+        age u64 => age,
+        err str => {
+            print(err);
+            -1
+        }
+
+        else => 0,
+    }
 }

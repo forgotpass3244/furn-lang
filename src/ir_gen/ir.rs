@@ -3,6 +3,7 @@ use crate::ir_gen::external::ExternalInfo;
 
 #[derive(Debug, Clone)]
 pub enum IRNode {
+    Nop,
     Call,
     ExternalReadPush64(ExternalInfo),
     ExternalReadCall(ExternalInfo),
@@ -23,5 +24,8 @@ pub enum IRNode {
     PushStaticStringPointer(usize),
     PushStackPointer(usize),
     Deref64,
+    StackDeref64(usize),
+    Add64,
+    Sub64,
 }
 

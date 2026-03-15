@@ -1,0 +1,10 @@
+# Example — attempting to take a reference to a compile-time constant (rejected)
+let ref_const_example :: ()
+    # literals/consts are not addressable in this language
+    let p :: &42; # compiler should emit "cannot grab a reference to a compile time constant"
+    print(0);
+end
+
+public main :: ()
+    ref_const_example()
+end

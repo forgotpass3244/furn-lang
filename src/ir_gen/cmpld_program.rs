@@ -70,6 +70,10 @@ impl<'a> CompiledProgram<'a> {
         self.globals.iter()
     }
 
+    pub fn globals_iter_mut(&mut self) -> std::slice::IterMut<'_, GlobalInfo<'a>> {
+        self.globals.iter_mut()
+    }
+
     pub fn any_global_exists(&self) -> bool {
         !self.globals.is_empty()
     }
@@ -131,31 +135,31 @@ impl<'a> CompiledProgram<'a> {
             match node {
 
                     IRNode::Pop64ToStack(offset) => {
-                        if *offset >= stack_offset {
+                        if *offset > stack_offset {
                             *offset += alignment;
                         }
                     },
 
                     IRNode::Load64ToStack(_, offset) => {
-                        if *offset >= stack_offset {
+                        if *offset > stack_offset {
                             *offset += alignment;
                         }
                     },
 
                     IRNode::StackReadPush64(offset) => {
-                        if *offset >= stack_offset {
+                        if *offset > stack_offset {
                             *offset += alignment;
                         }
                     },
 
                     IRNode::GlobalReadLoad64ToStack(_, offset) => {
-                        if *offset >= stack_offset {
+                        if *offset > stack_offset {
                             *offset += alignment;
                         }
                     },
 
                     IRNode::StackReadLoad64ToStack(src_offset, dst_offset) => {
-                        if *src_offset >= stack_offset {
+                        if *src_offset > stack_offset {
                             *src_offset += alignment;
                         }
                         if *dst_offset > stack_offset {
@@ -164,7 +168,7 @@ impl<'a> CompiledProgram<'a> {
                     },
                     
                     IRNode::PushStackPointer(offset) => {
-                        if *offset >= stack_offset {
+                        if *offset > stack_offset {
                             *offset += alignment;
                         }
                     },

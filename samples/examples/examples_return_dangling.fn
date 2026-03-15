@@ -1,0 +1,18 @@
+
+# Example — returning a reference (should be rejected by the compiler)
+# This demonstrates an attempt to return a pointer to a stack-local.
+let return_dangling :: ()
+    # function-local referent
+    var dummy :: 66;
+    var p *u64 :: &dummy;
+    # try to return a reference to a local (invalid)
+    let make_ref :: do
+        var tmp :: 123;
+        # p = &tmp;    # compiler should reject assigning `&tmp` to outer `p`
+    end
+end
+
+public main :: ()
+    # var `make_ref` would be unsafe — compiler should prevent this code
+    return_dangling()
+end

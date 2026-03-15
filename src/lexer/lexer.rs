@@ -1,30 +1,36 @@
 use std::fs;
 
-use crate::lexer::{token_map::TokenMap, tokens::{Token, Tokens}};
+use crate::lexer::{token_map::TokenMap, tokens::{SourceLocation, TokenEnum, Tokens}};
 
 
 pub struct Lexer {
     input: Vec<char>,
     pos: usize,
+    loc: SourceLocation,
 }
 
 impl Lexer {
     pub fn from_file(file_name: &str) -> Self {
-        let file_data = fs::read_to_string(file_name).unwrap().chars().collect();
+        let file_data = fs::read_to_string(file_name).unwrap_or_else(|_| {
+            println!("{file_name}");
+            "public main = () { print (\"Hello, furn!\") }".to_string()
+        }).chars().collect();
         Self {
             input: file_data,
             pos: 0,
+            loc: SourceLocation::new(1, 1),
         }
     }
 
     pub fn tokenize<TokT: Clone>(&mut self, token_map: TokenMap<TokT>) -> Tokens<TokT> {
         let mut tokens = Tokens::new();
         while !self.is_eof() {
+            let loc = self.loc;
             if self.is_space() {
                 self.advance();
             } else if self.peek() == '"' {
                 let text = self.lex_quoted();
-                tokens.push(Token::StringLiteral(text));
+                tokens.push(TokenEnum::StringLiteral(text).to_tok(loc));
             } else if self.peek() == '#' {
                 self.advance();
                 if self.peek() == '{' {
@@ -51,16 +57,16 @@ impl Lexer {
                 let token_keyword = self.map_to_keyword(&token_map, &ident);
 
                 if let Some(other) = token_keyword {
-                    tokens.push(Token::from_other(other));
+                    tokens.push(TokenEnum::from_other(other).to_tok(loc));
                 } else {
-                    tokens.push(Token::Ident(ident));
+                    tokens.push(TokenEnum::Ident(ident).to_tok(loc));
                 }
             } else if self.is_digit() {
                 let int = self.lex_int();
-                tokens.push(Token::IntLiteral(int));
+                tokens.push(TokenEnum::IntLiteral(int).to_tok(loc));
             } else {
                 match self.map_to_token(&token_map) {
-                    Some(token_other) => tokens.push(Token::from_other(token_other)),
+                    Some(token_other) => tokens.push(TokenEnum::from_other(token_other).to_tok(loc)),
                     None => {
                         if self.is_eof() {
                             panic!("Unexpected end of file at position {}", self.pos);
@@ -110,6 +116,12 @@ impl Lexer {
     fn advance(&mut self) -> char {
         let ch = self.peek();
         self.pos += 1;
+        if ch == '\n' {
+            self.loc.line += 1;
+            self.loc.col = 1;
+        } else {
+            self.loc.col += 1;
+        }
         ch
     }
 
