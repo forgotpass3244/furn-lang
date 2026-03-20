@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{ir_gen::{cmpld_program::CompiledProgram, ctimeval::CTimeVal, external::ExternalInfo, global::GlobalInfo, ir::IRNode, lifetime::Lifetime, scope::Scope, symbol::CmplSymbol, typeval::{TypeVal, TypeValEnum}, variable::Variable}, lexer::tokens::SourceLocation, parser::ast::{AstBlock, Expr, ExprEnum, Operator, Stmt, StmtEnum}};
+use crate::{ir_gen::{cmpld_program::CompiledProgram, ctimeval::CTimeVal, external::ExternalInfo, global::GlobalInfo, ir::IRNode, lifetime::Lifetime, scope::Scope, symbol::CmplSymbol, typeval::{TypeVal, TypeValEnum}, variable::Variable}, lexer::tokens::SourceLocation, parser::ast::{AstBlock, Expr, ExprEnum, IfKind, Operator, Stmt, StmtEnum}};
 
 const ADDRESS_SIZE: usize = 8;
 const SIZE_64: usize = 8;
@@ -689,14 +689,61 @@ impl<'a> IRGen<'a> {
                 }
             },
 
-            ExprEnum::If(condition, body, else_body) => {
-                // let condition_symbol = self.resolve_expr(condition);
-                self.gen_expr(condition);
+            ExprEnum::If(if_kind, body, else_body) => {
+                self.open_scope();
 
-                // TODO: make 64bits not hardcoded
-                let jump_ifn_label = self.cprog.count_ir();
-                self.emit_node(IRNode::JumpIfNot64FromOffset(0));
-                self.stack_sz -= 8;
+                match &(**if_kind) {
+                    IfKind::Conditional(condition) => {
+                        // let condition_symbol = self.resolve_expr(&condition);
+                        self.gen_expr(condition);
+                        self.emit_node(IRNode::JumpIfNot64FromOffset(0));
+                        self.stack_sz -= SIZE_64;
+                    },
+                    
+                    IfKind::ConstBinding { name, type_expr, init } => {
+                        let init_symbol = self.resolve_expr(init);
+                        match init_symbol.typeval.as_enum() {
+                            TypeValEnum::TaggedUnion(typevals) => {
+                                let typeval = self.resolve_expr(type_expr).typeval;
+                                let var = Variable {
+                                    name: name.clone(),
+                                    typeval: typeval.clone(),
+                                    global_pos: None,
+                                    stack_loc: None,
+                                    const_val: None,
+                                    external: None,
+                                    is_alias: false,
+                                    lifetime: self.lifetime_here(),
+                                    is_unsafe: false,
+                                };
+
+                                self.add_var(var);
+
+                                let top_loc = self.stack_sz;
+                                self.gen_expr(init);
+                                self.emit_node(IRNode::Pop64ToStack((self.stack_sz - top_loc) - SIZE_64));
+                                self.stack_sz = top_loc;
+
+                                let index = typevals.iter().position(|x| *x == typeval);
+                                if let Some(index) = index {
+                                    self.emit_node(IRNode::JumpIfNotEqConst64FromOffset(index as u64, 0));
+                                } else {
+                                    self.emit_diagnostic(type_expr.get_loc(), format!("type `{typeval}` is not a variant in tagged union `{}`", init_symbol.typeval).as_str());
+                                    self.emit_node(IRNode::JumpIfNotEqConst64FromOffset(0, 0));
+                                }
+                            },
+
+                            _ => {
+                                self.emit_diagnostic(init.get_loc(), format!("type `{}` does not support if bindings", init_symbol.typeval).as_str());
+                                self.close_scope();
+                                return
+                            },
+                        }
+                    },
+                };
+
+                // TODO: make 8 bytes not hardcoded
+                let jump_ifn_label = self.cprog.ir_pos();
 
                 self.gen_block(body, false, expr.get_loc());
                 let skipover_else_label = self.cprog.count_ir();
@@ -709,13 +756,16 @@ impl<'a> IRGen<'a> {
                     IRNode::JumpIfNot64FromOffset(offset) => {
                         *offset = else_label - (jump_ifn_label as i64);
                     },
+                    IRNode::JumpIfNotEqConst64FromOffset(_,offset) => {
+                        *offset = else_label - (jump_ifn_label as i64);
+                    },
                     _ => unreachable!(),
                 }
 
                 if let Some(else_body) = else_body {
                     self.gen_block(else_body, false, expr.get_loc());
 
-                    let after_else_label = self.cprog.count_ir() as i64;
+                    let after_else_label = self.cprog.ir_pos() as i64;
                     match self.cprog.node_mut_at(skipover_else_label) {
                         IRNode::JumpFromOffset(offset) => {
                             *offset = after_else_label - (skipover_else_label as i64);
@@ -723,6 +773,8 @@ impl<'a> IRGen<'a> {
                         _ => unreachable!(),
                     }
                 }
+
+                self.close_scope();
             },
 
             ExprEnum::Block(block, is_unsafe_block) => self.gen_block(block, *is_unsafe_block, expr.get_loc()),
@@ -798,6 +850,11 @@ impl<'a> IRGen<'a> {
                 self.global_read_push(&typeval, pos);
             } else if let Some(stack_loc) = var.stack_loc {
                 self.stack_read_push(&typeval, self.stack_sz - stack_loc);
+            } else {
+                let size = typeval.size_of();
+                self.emit_node(IRNode::StackAlloc(size));
+                self.stack_sz += size;
+                self.emit_diagnostic(&SourceLocation::garbage(), "variable is invalid and cannot be read");
             }
         }
     }

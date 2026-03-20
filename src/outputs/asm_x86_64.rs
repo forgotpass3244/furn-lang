@@ -86,7 +86,12 @@ pub fn gen_asm_x86_64_from_ir(out: &mut BufWriter<File>, cprog: &CompiledProgram
             IRNode::Load64ToStack(int, offset) => writeln!(out, "    OP_{i}: mov qword [rsp+{offset}], {int}")?,
             IRNode::GlobalReadPush64(offset) => writeln!(out, "    OP_{i}: push qword [GLOB_{offset}]")?,
             IRNode::StackReadPush64(offset) => writeln!(out, "    OP_{i}: push qword [rsp+{offset}]")?,
-            IRNode::PushStaticStringPointer(pos) => writeln!(out, "    OP_{i}: push qword STR_{pos}")?,
+            
+            IRNode::PushStaticStringPointer(pos) => {
+                writeln!(out, "OP_{i}:")?;
+                writeln!(out, "    lea rax, [rel STR_{pos}]")?;
+                writeln!(out, "    push rax")?;
+            },
             
             IRNode::ExternalReadPush64(external) => {
                 if external.is_const {
@@ -133,6 +138,13 @@ pub fn gen_asm_x86_64_from_ir(out: &mut BufWriter<File>, cprog: &CompiledProgram
                 writeln!(out, "    pop rax")?;
                 writeln!(out, "    test rax, rax")?;
                 writeln!(out, "    jz OP_{}", (i as i64) + offset)?;
+            },
+
+            IRNode::JumpIfNotEqConst64FromOffset(expected, offset) => {
+                writeln!(out, "OP_{i}:")?;
+                writeln!(out, "    pop rax")?;
+                writeln!(out, "    cmp rax, {expected}")?;
+                writeln!(out, "    jne OP_{}", (i as i64) + offset)?;
             },
             
             IRNode::PushStackPointer(offset) => {

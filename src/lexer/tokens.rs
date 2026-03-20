@@ -70,7 +70,7 @@ impl SourceLocation {
     }
 
     pub fn garbage() -> Self {
-        Self::new(-1, -1)
+        Self::new(1, 1)
     }
 }
 

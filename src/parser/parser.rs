@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::{lexer::tokens::{SourceLocation, TokenEnum, Tokens, TokensIterator}, parser::ast::{AstBlock, Expr, ExprEnum, Stmt, StmtEnum}, tok::token_other::TokenOther};
+use crate::{lexer::tokens::{SourceLocation, TokenEnum, Tokens, TokensIterator}, parser::ast::{AstBlock, Expr, ExprEnum, IfKind, Stmt, StmtEnum}, tok::token_other::TokenOther};
 
 
 pub struct Parser<'a> {
@@ -424,7 +424,16 @@ impl Parser<'_> {
             Ok(ExprEnum::TypeUnit.to_expr(loc))
         } else if self.match_token(TokenOther::If).is_some() {
             self.expect_token(TokenOther::OParen);
+
             let condition = self.parse_expr()?;
+            let if_kind = if self.match_token(TokenOther::ColonColon).is_some() {
+                let name = self.parse_name();
+                let type_expr = self.parse_type_expr()?;
+                IfKind::ConstBinding { name, type_expr, init: condition }
+            } else {
+                IfKind::Conditional(condition)
+            };
+
             self.expect_token(TokenOther::CParen);
 
             let result = self.parse_block(vec![TokenOther::Else, TokenOther::End])?;
@@ -435,7 +444,7 @@ impl Parser<'_> {
                 _ => unreachable!(),
             };
 
-            Ok(ExprEnum::If(Box::new(condition), body, else_body).to_expr(loc))
+            Ok(ExprEnum::If(Box::new(if_kind), body, else_body).to_expr(loc))
         } else if self.is_token(TokenOther::Unsafe) || self.is_token(TokenOther::Do) {
 
             let is_unsafe_block = if self.match_token(TokenOther::Unsafe).is_some() {

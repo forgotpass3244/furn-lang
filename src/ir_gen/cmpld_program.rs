@@ -26,7 +26,7 @@ impl<'a> CompiledProgram<'a> {
     }
 
     pub fn get_package_name(&self) -> Option<&'a str> {
-        self.package_name.clone()
+        self.package_name
     }
 
     pub fn set_package_name(&mut self, name: Option<&'a str>) {
@@ -43,11 +43,7 @@ impl<'a> CompiledProgram<'a> {
     }
 
     pub fn ir_pos(&self) -> usize {
-        if self.ir.len() > 0 {
-            self.ir.len() - 1
-        } else {
-            0
-        }
+        self.ir.len().checked_sub(1).unwrap()
     }
 
     pub fn node_clone_at(&self, pos: usize) -> IRNode {
@@ -117,11 +113,15 @@ impl<'a> CompiledProgram<'a> {
     }
 
     pub fn shift_nodes(&mut self, range: RangeInclusive<usize>) {
-        for i in range.clone().rev() {
-            self.ir.remove(i);
+        let start = *range.start();
+        let end = (*range.end()).min(self.ir.len().saturating_sub(1));
+
+        if start <= end {
+            self.ir.drain(start..=end);
         }
 
-        self.realign_addresses(*range.start(), range.count(), false);
+        let count = *range.end() - *range.start() + 1;
+        self.realign_addresses(*range.start(), count, false);
     }
 
     pub fn insert_node(&mut self, pos: usize, node: IRNode) {
@@ -141,36 +141,42 @@ impl<'a> CompiledProgram<'a> {
                     },
 
                     IRNode::Load64ToStack(_, offset) => {
-                        if *offset > stack_offset {
+                        if *offset >= stack_offset {
                             *offset += alignment;
                         }
                     },
 
                     IRNode::StackReadPush64(offset) => {
-                        if *offset > stack_offset {
+                        if *offset >= stack_offset {
                             *offset += alignment;
                         }
                     },
 
                     IRNode::GlobalReadLoad64ToStack(_, offset) => {
-                        if *offset > stack_offset {
+                        if *offset >= stack_offset {
                             *offset += alignment;
                         }
                     },
 
                     IRNode::StackReadLoad64ToStack(src_offset, dst_offset) => {
-                        if *src_offset > stack_offset {
+                        if *src_offset >= stack_offset {
                             *src_offset += alignment;
                         }
-                        if *dst_offset > stack_offset {
+                        if *dst_offset >= stack_offset {
                             *dst_offset += alignment;
                         }
                     },
                     
                     IRNode::PushStackPointer(offset) => {
-                        if *offset > stack_offset {
+                        println!("before");
+                        println!("{offset}");
+                        if *offset >= stack_offset {
                             *offset += alignment;
                         }
+                        println!("after");
+                        println!("{offset}");
+                        println!("{alignment}");
+                        println!("end");
                     },
 
                     _ => (),
@@ -180,7 +186,22 @@ impl<'a> CompiledProgram<'a> {
         }
     }
 
+    fn adjust(max: i64, offset: &mut i64, pos: usize, count: usize, insert: bool) {
+        if *offset >= pos as i64 {
+            if insert {
+                *offset += count as i64;
+            } else {
+                *offset -= count as i64;
+            }
+        }
+
+        // make sure it doesnt point out of bounds
+        *offset = (*offset).clamp(0, max);
+    }
+
     fn realign_addresses(&mut self, pos: usize, count: usize, switch: bool) {
+        let max = (self.ir.len().saturating_sub(1)) as i64;
+
         for global in self.globals.iter_mut() {
             match &mut global.init {
                 CTimeVal::Function { address, .. } => {
@@ -188,7 +209,7 @@ impl<'a> CompiledProgram<'a> {
                         if switch {
                             *address += count;
                         } else {
-                            *address -= count;
+                            *address = address.saturating_sub(count);
                         }
                     }
                 }
@@ -197,62 +218,19 @@ impl<'a> CompiledProgram<'a> {
             }
         }
 
-        let mut i: usize = 0;
-        for node in &mut *self.ir {
+        for node in &mut self.ir {
             match node {
 
-                IRNode::CallFromOffset(offset) => {
-                    if i < pos {
-                        if *offset >= (pos as i64) {
-                            *offset -= if switch { count as i64 } else { -(count as i64) };
-                        }
-                    } else {
-                        if *offset < (pos as i64) {
-                            *offset -= if switch { count as i64 } else { -(count as i64) };
-                        }
-                    }
-                },
-
-                IRNode::PushAddressFromOffset(offset) => {
-                    if i < pos {
-                        if *offset >= (pos as i64) {
-                            *offset -= if switch { count as i64 } else { -(count as i64) };
-                        }
-                    } else {
-                        if *offset < (pos as i64) {
-                            *offset -= if switch { count as i64 } else { -(count as i64) };
-                        }
-                    }
-                },
-
-                IRNode::JumpFromOffset(offset) => {
-                    if i < pos {
-                        if *offset >= (pos as i64) {
-                            *offset -= if switch { count as i64 } else { -(count as i64) };
-                        }
-                    } else {
-                        if *offset < (pos as i64) {
-                            *offset -= if switch { count as i64 } else { -(count as i64) };
-                        }
-                    }
-                },
-
-                IRNode::JumpIfNot64FromOffset(offset) => {
-                    if i < pos {
-                        if *offset >= (pos as i64) {
-                            *offset -= if switch { count as i64 } else { -(count as i64) };
-                        }
-                    } else {
-                        if *offset < (pos as i64) {
-                            *offset -= if switch { count as i64 } else { -(count as i64) };
-                        }
-                    }
+                IRNode::CallFromOffset(offset)
+                | IRNode::PushAddressFromOffset(offset)
+                | IRNode::JumpFromOffset(offset)
+                | IRNode::JumpIfNot64FromOffset(offset)
+                | IRNode::JumpIfNotEqConst64FromOffset(_, offset) => {
+                    Self::adjust(max, offset, pos, count, switch);
                 },
 
                 _ => (),
             }
-
-            i += 1;
         }
     }
 }

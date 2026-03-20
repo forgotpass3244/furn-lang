@@ -9,6 +9,7 @@ pub enum IRNode {
     ExternalReadCall(ExternalInfo),
     CallFromOffset(i64),
     JumpIfNot64FromOffset(i64),
+    JumpIfNotEqConst64FromOffset(u64, i64),
     Return { params_size: usize },
     Push64(u64),
     Pop64ToStack(usize),

@@ -1,7 +1,7 @@
 
 use std::{env::{self, args}, fs::{self, File}, io::{BufWriter, Write}, process::{Command, Stdio}, time::Instant, hint::black_box};
 
-use crate::{flags::{CompilationTarget, Flags}, ir_gen::{cmpld_program::CompiledProgram, ir_gen::IRGen, ir_optimizer::IROptimizer}, lexer::{lexer::Lexer, tokens::Tokens}, outputs::asm_x86_64::gen_asm_x86_64_from_ir, parser::parser::Parser, tok::token_other::TokenOther, maybe_inf::MaybeInf};
+use crate::{flags::{CompilationTarget, Flags}, ir_gen::{cmpld_program::CompiledProgram, ir_gen::IRGen, ir_optimizer::IROptimizer}, lexer::{lexer::Lexer, tokens::Tokens}, maybe_inf::MaybeInf, outputs::asm_x86_64::gen_asm_x86_64_from_ir, parser::parser::Parser, tok::token_other::TokenOther};
 pub mod flags;
 pub mod maybe_inf;
 pub mod lexer;
@@ -32,14 +32,26 @@ fn output_program(cprog: &CompiledProgram, target: CompilationTarget, flags: &Fl
     
     match target {
         CompilationTarget::LinuxX86_64 => gen_asm_x86_64_from_ir(&mut buffer, cprog).unwrap(),
+        CompilationTarget::Windows => gen_asm_x86_64_from_ir(&mut buffer, cprog).unwrap(),
         _ => unreachable!(),
     }
 
     buffer.flush().unwrap();
 
+    let obj_file = match target {
+        CompilationTarget::LinuxX86_64 => "out.o",
+        CompilationTarget::Windows => "out.obj",
+        _ => unreachable!(),
+    };
+
     let mut assembler = Command::new("nasm");
     assembler.stdout(Stdio::inherit()).stderr(Stdio::inherit());
-    assembler.arg("-felf64").arg(out_dir.join("out.asm")).arg("-o".to_string() + out_dir.join("out.o").to_str().unwrap());
+    assembler.arg(match target {
+        CompilationTarget::LinuxX86_64 => "-felf64",
+        CompilationTarget::Windows => "-fwin64",
+        _ => unreachable!(),
+    });
+    assembler.arg(out_dir.join("out.asm")).arg("-o".to_string() + out_dir.join(obj_file).to_str().unwrap());
 
     match assembler.output().expect("Assembler command failed to start (make sure you have NASM installed)").status.code() {
         Some(0) => {
@@ -52,7 +64,11 @@ fn output_program(cprog: &CompiledProgram, target: CompilationTarget, flags: &Fl
         },
     }
 
-    let mut linker = Command::new("ld");
+    let mut linker = Command::new(match target {
+        CompilationTarget::LinuxX86_64 => "ld",
+        CompilationTarget::Windows => "gcc",
+        _ => unreachable!(),
+    });
     linker.stdout(Stdio::inherit()).stderr(Stdio::inherit());
     
     let output_path = flags.output_file_name.clone().unwrap_or_else(|| {
@@ -62,10 +78,21 @@ fn output_program(cprog: &CompiledProgram, target: CompilationTarget, flags: &Fl
             flags.file_name.clone()
             .unwrap_or_default().as_str()
         ).to_string()
-    });
-    linker.arg("rt.o").arg(out_dir.join("out.o")).arg("-o").arg(output_path);
+    }) + match target {
+        CompilationTarget::LinuxX86_64 => None,
+        CompilationTarget::Windows => Some(".exe"),
+        _ => unreachable!(),
+    }.unwrap_or_default();
 
-    match linker.output().expect("Command ld failed to start").status.code() {
+    let runtime_file = match target {
+        CompilationTarget::LinuxX86_64 => "runtimes/furn_rt_linuxx86_64.o",
+        CompilationTarget::Windows => "runtimes\\furn_rt_win64.obj",
+        _ => unreachable!(),
+    };
+    
+    linker.arg(runtime_file).arg(out_dir.join(obj_file)).arg("-o").arg(output_path);
+
+    match linker.output().expect("Linker command failed to start").status.code() {
         Some(0) => {
             clear_line();
             println!(":: Build complete.")
@@ -150,9 +177,17 @@ fn compile(flags: &Flags) {
 }
 
 fn main() {
-    let flags = Flags::parse_args(args());
-    for _ in 0..(flags.compile_iters.unwrap_or(1)) {
-        black_box(compile(&flags));
+    let mut args = args();
+    if args.len() > 1 {
+        let flags = Flags::parse_args(args);
+        for _ in 0..(flags.compile_iters.unwrap_or(1)) {
+            black_box(compile(&flags));
+        }
+    } else {
+        let program_name = args.nth(0);
+        if let Some(program_name) = program_name {
+            println!("usage:\n{program_name} <file> [ flags... ]")
+        }
     }
 }
 

@@ -19,13 +19,19 @@ impl Operator {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum IfKind {
+    Conditional(Expr),
+    ConstBinding { name: String, type_expr: Expr, init: Expr },
+}
+
 // NEVER add cloning to expression enum
 #[derive(Debug, Clone)]
 pub enum ExprEnum {
     IntLit(u64),
     StringLit(String),
-    Block(AstBlock, bool),// (body, return_expr, is_unsafe_block)
-    If(Box<Expr>, AstBlock, Option<AstBlock>), // (condition, body, else_body)
+    Block(AstBlock, bool), // (body, return_expr, is_unsafe_block)
+    If(Box<IfKind>, AstBlock, Option<AstBlock>), // (condition, body, else_body)
     Call(Box<Expr>, Vec<Expr>),
     Function(AstBlock, Option<Box<Expr>>, Vec<Stmt>), // (body, return_type, params)
     Variable(String),

@@ -1,6 +1,4 @@
 
-# furn-lang -o program samples/examples/examples_copy_value.fn; ./program; echo exitcode $?
-
 # Example 3 — copy value instead of storing a short-lived reference
 # let example_copy_value :: ()
 #     var stored u64 :: 0;              # owns the value
@@ -25,4 +23,3 @@ public main :: ()
     # example_copy_value();
     5
 end
-

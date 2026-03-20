@@ -6,6 +6,7 @@ use crate::maybe_inf::MaybeInf;
 pub enum CompilationTarget {
     None,
     LinuxX86_64,
+    Windows, // windows is ahh
 }
 
 #[derive(Clone)]
@@ -99,6 +100,7 @@ impl Flags {
                         self.target = match string.as_str() {
                             "none" => Some(CompilationTarget::None),
                             "linux_x86_64" => Some(CompilationTarget::LinuxX86_64),
+                            "windows" => Some(CompilationTarget::Windows),
                             _ => None,
                         };
                     }
