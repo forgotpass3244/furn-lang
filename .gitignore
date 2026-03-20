@@ -8,6 +8,6 @@ rt.o
 /perf.data
 /perf.data.old
 /program
-/*.o
-/*.obj
+*.o
+*.obj
 /furn-lang
