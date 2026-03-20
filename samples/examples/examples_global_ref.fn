@@ -5,7 +5,7 @@ var GLOBAL_VAL :: 777;
 
 let global_ref_example :: ()
     var p *u64 :: &GLOBAL_VAL;   # allowed: GLOBAL_VAL is global
-    print(**p);
+    print(*p);
 end
 
 public main :: ()
